@@ -126,13 +126,62 @@ class SkyscannerScraper(BaseScraper):
                 await human_scroll(page, distance=500)
                 await human_delay(2, 3)
 
-                # Extract flight data
-                content = await page.content()
-                results = self._parse_results_from_html(content, request)
+                # Extract flight data using JavaScript to get structured
+                # card text from each flight result row
+                flight_data = await page.evaluate("""() => {
+                    const flights = [];
+
+                    // Skyscanner result cards — try multiple selector strategies
+                    let rows = document.querySelectorAll(
+                        '[class*="ItineraryList"] [class*="ItineraryCard"], ' +
+                        '[class*="FlightsResults"] [class*="resultItem"], ' +
+                        '[data-testid*="itinerary"], ' +
+                        '[class*="EcoTicketWrapper"]'
+                    );
+
+                    // Broader fallback
+                    if (!rows.length) {
+                        rows = document.querySelectorAll(
+                            'a[href*="booking"], ' +
+                            'div[class*="flight"], ' +
+                            '[role="listitem"]'
+                        );
+                    }
+
+                    for (let i = 0; i < Math.min(rows.length, 25); i++) {
+                        const row = rows[i];
+                        const text = (row.innerText || '').trim();
+
+                        // Must have enough text to be a real result
+                        if (text.length < 15) continue;
+
+                        // Must contain a price-like pattern
+                        if (!/[\d,]{2,}/.test(text)) continue;
+
+                        flights.push({ text: text, index: i });
+                    }
+
+                    return flights;
+                }""")
+
+                deep_link = skyscanner_link(request)
+
+                if flight_data:
+                    for item in flight_data:
+                        parsed = self._parse_skyscanner_card(
+                            item.get("text", ""), request, deep_link
+                        )
+                        if parsed:
+                            results.append(parsed)
 
                 if not results:
-                    # Try extracting via element selectors
-                    results = await self._extract_via_selectors(page, request)
+                    # Fallback: try HTML parsing for prices + details
+                    content = await page.content()
+                    results = self._parse_results_from_html(content, request)
+
+                if not results:
+                    # Last resort: extract prices only via selectors
+                    results = await self._extract_prices_only(page, request)
 
         except Exception as e:
             logger.error(f"Skyscanner search failed: {e}")
@@ -140,10 +189,150 @@ class SkyscannerScraper(BaseScraper):
         results.sort(key=lambda r: r.price)
         return results
 
+    def _parse_skyscanner_card(
+        self, card_text: str, request: SearchRequest, deep_link: str
+    ) -> Optional[FlightResult]:
+        """Parse a Skyscanner result card's text into a FlightResult.
+
+        Skyscanner card text typically contains:
+            06:00 - 09:30
+            British Airways   Direct
+            3h 30m
+            LHR - BCN
+            £85
+        """
+        if not card_text or len(card_text) < 15:
+            return None
+
+        # Extract price
+        price_match = re.search(r"[£$€¥₹]\s*([\d,]+(?:\.\d{2})?)", card_text)
+        if not price_match:
+            price_match = re.search(r"[A-Z]{3}\s*([\d,]+)", card_text)
+        if not price_match:
+            return None
+
+        price = float(price_match.group(1).replace(",", ""))
+        if price < 10:
+            return None
+
+        # Extract times
+        dep_time_dt = None
+        arr_time_dt = None
+
+        # 12-hour format
+        time_12h = re.findall(r"(\d{1,2}:\d{2}\s*[AaPp][Mm])", card_text)
+        if len(time_12h) >= 2:
+            try:
+                dep_time_dt = datetime.strptime(
+                    f"{request.departure_date} {time_12h[0].strip()}",
+                    "%Y-%m-%d %I:%M %p",
+                )
+                arr_time_dt = datetime.strptime(
+                    f"{request.departure_date} {time_12h[1].strip()}",
+                    "%Y-%m-%d %I:%M %p",
+                )
+            except (ValueError, TypeError):
+                pass
+        else:
+            # 24-hour format: "06:00 - 09:30"
+            time_24h = re.findall(r"(\d{1,2}:\d{2})(?!\s*[AaPp])", card_text)
+            if len(time_24h) >= 2:
+                try:
+                    dep_time_dt = datetime.strptime(
+                        f"{request.departure_date} {time_24h[0].strip()}",
+                        "%Y-%m-%d %H:%M",
+                    )
+                    arr_time_dt = datetime.strptime(
+                        f"{request.departure_date} {time_24h[1].strip()}",
+                        "%Y-%m-%d %H:%M",
+                    )
+                except (ValueError, TypeError):
+                    pass
+
+        # Extract airline
+        airline = self._extract_airline(card_text)
+
+        # Extract duration
+        duration_minutes = None
+        dur_match = re.search(
+            r"(\d+)\s*(?:hr|h)\s*(?:(\d+)\s*(?:min|m))?", card_text, re.IGNORECASE
+        )
+        if dur_match:
+            duration_minutes = int(dur_match.group(1)) * 60
+            if dur_match.group(2):
+                duration_minutes += int(dur_match.group(2))
+
+        # Extract stops
+        stops = 0
+        if re.search(r"(?:nonstop|non-stop|direct)", card_text, re.IGNORECASE):
+            stops = 0
+        else:
+            stop_match = re.search(r"(\d+)\s*stop", card_text, re.IGNORECASE)
+            if stop_match:
+                stops = int(stop_match.group(1))
+
+        outbound = FlightLeg(
+            departure_airport=request.origin,
+            arrival_airport=request.destination,
+            airline=airline,
+            departure_time=dep_time_dt,
+            arrival_time=arr_time_dt,
+            duration_minutes=duration_minutes,
+            stops=stops,
+        )
+
+        return FlightResult(
+            price=price,
+            currency=request.currency,
+            outbound=outbound,
+            source=Source.SKYSCANNER,
+            deep_link=deep_link,
+        )
+
+    def _extract_airline(self, text: str) -> str:
+        """Extract airline name from card text using word-boundary matching."""
+        # Order matters: longer/more-specific names first to avoid partial matches
+        airlines = [
+            "British Airways", "American Airlines", "Alaska Airlines",
+            "Hawaiian Airlines", "Japan Airlines", "Turkish Airlines",
+            "Singapore Airlines", "Brussels Airlines",
+            "TAP Air Portugal", "TAP Portugal",
+            "Air New Zealand", "Virgin Atlantic", "Virgin Australia",
+            "Air France", "Air Canada", "Air China", "Air Europa",
+            "Royal Air Maroc", "China Eastern", "China Southern",
+            "Garuda Indonesia", "Philippine Airlines",
+            "Vietnam Airlines", "Thai Airways",
+            "Qatar Airways", "Cathay Pacific", "Korean Air",
+            "Kenya Airways",
+            "Lufthansa", "Emirates", "Ryanair", "easyJet",
+            "Wizz Air", "Vueling", "Norwegian", "Finnair", "Swiss",
+            "Austrian", "Aegean", "Czech Airlines",
+            "Iberia", "Aer Lingus",
+            "Southwest", "JetBlue", "Frontier",
+            "WestJet", "LATAM", "Avianca", "Volaris",
+            "Qantas", "Etihad", "Oman Air", "Gulf Air", "Saudia",
+            "EgyptAir", "ITA Airways", "Transavia",
+            "Eurowings", "Condor",
+            "Multiple airlines",
+            # Short names last with word-boundary matching
+            "KLM", "ANA", "JAL", "SAS", "LOT", "TUI",
+            "United", "Delta", "American", "Alaska",
+            "Spirit", "Copa",
+        ]
+        text_lower = text.lower()
+        for airline in airlines:
+            if len(airline) <= 4:
+                if re.search(r"(?<![a-zA-Z])" + re.escape(airline) + r"(?![a-zA-Z])", text, re.IGNORECASE):
+                    return airline
+            else:
+                if airline.lower() in text_lower:
+                    return airline
+        return ""
+
     def _parse_results_from_html(
         self, html: str, request: SearchRequest
     ) -> list[FlightResult]:
-        """Parse flight results from the raw HTML."""
+        """Parse flight results from the raw HTML using BeautifulSoup."""
         try:
             from bs4 import BeautifulSoup
         except ImportError:
@@ -152,9 +341,25 @@ class SkyscannerScraper(BaseScraper):
 
         soup = BeautifulSoup(html, "lxml")
         results = []
+        deep_link = skyscanner_link(request)
 
-        # Look for price elements in various Skyscanner layouts
-        # Match common currency symbols and also plain numbers
+        # Find itinerary/result containers in the HTML
+        # Try to get structured blocks rather than just price elements
+        containers = soup.select(
+            '[class*="ItineraryCard"], [class*="resultItem"], '
+            '[data-testid*="itinerary"], [class*="EcoTicketWrapper"]'
+        )
+
+        if containers:
+            for container in containers[:25]:
+                text = container.get_text(separator="\n", strip=True)
+                parsed = self._parse_skyscanner_card(text, request, deep_link)
+                if parsed:
+                    results.append(parsed)
+            if results:
+                return results
+
+        # Fallback: just find prices in the raw HTML
         price_elements = soup.find_all(
             string=re.compile(r"[\$€£¥₹]\s*\d+|[A-Z]{3}\s*\d+")
         )
@@ -164,7 +369,6 @@ class SkyscannerScraper(BaseScraper):
             text = str(el).strip()
             price_match = re.search(r"[\$€£¥₹]\s*([\d,]+)", text)
             if not price_match:
-                # Try matching "GBP 123" / "USD 456" style
                 price_match = re.search(r"[A-Z]{3}\s*([\d,]+)", text)
             if not price_match:
                 continue
@@ -174,8 +378,6 @@ class SkyscannerScraper(BaseScraper):
                 continue
             seen_prices.add(price)
 
-            # Use the requested currency — Skyscanner returns prices in the
-            # currency we asked for via the URL parameter
             result = FlightResult(
                 price=price,
                 currency=request.currency,
@@ -184,19 +386,19 @@ class SkyscannerScraper(BaseScraper):
                     arrival_airport=request.destination,
                 ),
                 source=Source.SKYSCANNER,
-                deep_link=skyscanner_link(request),
+                deep_link=deep_link,
             )
             results.append(result)
 
         return results
 
-    async def _extract_via_selectors(
+    async def _extract_prices_only(
         self, page, request: SearchRequest
     ) -> list[FlightResult]:
-        """Try to extract results using page selectors."""
+        """Last-resort extraction: just get prices."""
         results = []
+        deep_link = skyscanner_link(request)
 
-        # Various Skyscanner selectors for prices
         selectors = [
             "[class*='Price'] span",
             "[class*='price'] span",
@@ -227,7 +429,7 @@ class SkyscannerScraper(BaseScraper):
                             arrival_airport=request.destination,
                         ),
                         source=Source.SKYSCANNER,
-                        deep_link=skyscanner_link(request),
+                        deep_link=deep_link,
                     )
                     results.append(result)
                 except Exception:

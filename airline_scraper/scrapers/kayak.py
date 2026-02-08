@@ -173,21 +173,44 @@ class KayakScraper(BaseScraper):
         if price < 10:
             return None
 
-        # Extract airline name (usually at the start or a known pattern)
+        # Extract airline name — longer names first, word-boundary for short ones
         airline = ""
-        airline_patterns = [
-            r"(United|Delta|American|Southwest|JetBlue|Alaska|Spirit|Frontier|"
-            r"Hawaiian|Allegiant|Sun Country|British Airways|Lufthansa|"
-            r"Air France|KLM|Emirates|Qatar|Singapore|Cathay|ANA|JAL|"
-            r"Korean Air|Turkish|Iberia|Aer Lingus|Ryanair|easyJet|"
-            r"WestJet|Air Canada|LATAM|Avianca|Copa|Volaris|"
-            r"Multiple airlines|Various)"
+        airlines_list = [
+            "British Airways", "American Airlines", "Alaska Airlines",
+            "Hawaiian Airlines", "Japan Airlines", "Turkish Airlines",
+            "Singapore Airlines", "Brussels Airlines", "Sun Country",
+            "TAP Air Portugal", "TAP Portugal",
+            "Air New Zealand", "Virgin Atlantic", "Virgin Australia",
+            "Air France", "Air Canada", "Air China", "Air Europa",
+            "Royal Air Maroc", "China Eastern", "China Southern",
+            "Garuda Indonesia", "Philippine Airlines",
+            "Vietnam Airlines", "Thai Airways",
+            "Qatar Airways", "Cathay Pacific", "Korean Air",
+            "Kenya Airways",
+            "Lufthansa", "Emirates", "Ryanair", "easyJet",
+            "Wizz Air", "Vueling", "Norwegian", "Finnair", "Swiss",
+            "Austrian", "Aegean", "Allegiant",
+            "Iberia", "Aer Lingus",
+            "Southwest", "JetBlue", "Frontier",
+            "WestJet", "LATAM", "Avianca", "Volaris",
+            "Qantas", "Etihad", "Oman Air", "Gulf Air", "Saudia",
+            "EgyptAir", "ITA Airways", "Transavia",
+            "Eurowings", "Condor",
+            "Multiple airlines", "Various",
+            "KLM", "ANA", "JAL", "SAS", "LOT", "TUI",
+            "United", "Delta", "American", "Alaska",
+            "Spirit", "Copa",
         ]
-        for pattern in airline_patterns:
-            match = re.search(pattern, card_text, re.IGNORECASE)
-            if match:
-                airline = match.group(1)
-                break
+        card_lower = card_text.lower()
+        for a in airlines_list:
+            if len(a) <= 4:
+                if re.search(r"(?<![a-zA-Z])" + re.escape(a) + r"(?![a-zA-Z])", card_text, re.IGNORECASE):
+                    airline = a
+                    break
+            else:
+                if a.lower() in card_lower:
+                    airline = a
+                    break
 
         # Extract duration (e.g., "5h 30m", "12h 05m")
         duration_match = re.search(r"(\d+)h\s*(\d+)m", card_text)
