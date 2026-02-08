@@ -21,6 +21,7 @@ from airline_scraper.models import (
     TripType,
 )
 from airline_scraper.scrapers.base import BaseScraper
+from airline_scraper.utils.airports import validate_stops
 from airline_scraper.utils.links import skyscanner_link
 from airline_scraper.utils.browser import (
     create_browser,
@@ -262,14 +263,16 @@ class SkyscannerScraper(BaseScraper):
             if dur_match.group(2):
                 duration_minutes += int(dur_match.group(2))
 
-        # Extract stops
+        # Extract stops — check for explicit stop count FIRST
         stops = 0
-        if re.search(r"(?:nonstop|non-stop|direct)", card_text, re.IGNORECASE):
+        stop_match = re.search(r"(\d+)\s*stop", card_text, re.IGNORECASE)
+        if stop_match:
+            stops = int(stop_match.group(1))
+        elif re.search(r"(?:nonstop|non-stop|direct)", card_text, re.IGNORECASE):
             stops = 0
-        else:
-            stop_match = re.search(r"(\d+)\s*stop", card_text, re.IGNORECASE)
-            if stop_match:
-                stops = int(stop_match.group(1))
+
+        # Validate stops against route distance
+        stops = validate_stops(stops, duration_minutes, request.origin, request.destination)
 
         outbound = FlightLeg(
             departure_airport=request.origin,

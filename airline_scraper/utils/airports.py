@@ -467,6 +467,148 @@ def get_airport_city_country(code: str) -> tuple[str, str]:
     return (code.upper(), "")
 
 
+# Approximate airport coordinates (lat, lon) for distance-based stop validation.
+# Only needs to be roughly correct — used to estimate max plausible nonstop time.
+AIRPORT_COORDS: dict[str, tuple[float, float]] = {
+    # UK & Ireland
+    "LHR": (51.47, -0.46), "LGW": (51.15, -0.19), "STN": (51.89, 0.26),
+    "LTN": (51.87, -0.37), "SEN": (51.57, 0.70), "LCY": (51.51, 0.05),
+    "MAN": (53.35, -2.27), "BHX": (52.45, -1.75), "EDI": (55.95, -3.37),
+    "GLA": (55.87, -4.43), "BRS": (51.38, -2.72), "LPL": (53.33, -2.85),
+    "NCL": (55.04, -1.69), "BFS": (54.66, -6.22), "BHD": (54.62, -5.87),
+    "LBA": (53.87, -1.66), "CWL": (51.40, -3.34), "DUB": (53.43, -6.27),
+    # Europe
+    "CDG": (49.01, 2.55), "ORY": (48.72, 2.36), "BVA": (49.45, 2.11),
+    "FCO": (41.80, 12.25), "CIA": (41.80, 12.59), "MXP": (45.63, 8.72),
+    "LIN": (45.45, 9.28), "BGY": (45.67, 9.70), "BCN": (41.30, 2.08),
+    "MAD": (40.47, -3.57), "AMS": (52.31, 4.77), "BER": (52.37, 13.52),
+    "MUC": (48.35, 11.79), "FRA": (50.03, 8.57), "HAM": (53.63, 9.99),
+    "DUS": (51.29, 6.77), "ZRH": (47.46, 8.55), "GVA": (46.24, 6.11),
+    "VIE": (48.11, 16.57), "BRU": (50.90, 4.48), "CRL": (50.46, 4.45),
+    "LIS": (38.77, -9.13), "OPO": (41.24, -8.68), "ATH": (37.94, 23.94),
+    "CPH": (55.62, 12.66), "ARN": (59.65, 17.94), "BMA": (59.35, 17.94),
+    "OSL": (60.19, 11.10), "HEL": (60.32, 24.96), "PRG": (50.10, 14.26),
+    "BUD": (47.44, 19.26), "WAW": (52.17, 20.97), "WMI": (52.45, 20.65),
+    "OTP": (44.57, 26.08), "IST": (41.26, 28.74), "SAW": (40.90, 29.31),
+    "NCE": (43.66, 7.22), "LYS": (45.73, 5.08), "NAP": (40.88, 14.29),
+    "VCE": (45.51, 12.35), "FLR": (43.81, 11.20), "AGP": (36.67, -4.49),
+    "PMI": (39.55, 2.74), "IBZ": (38.87, 1.37), "SVQ": (37.42, -5.89),
+    "VLC": (39.49, -0.47), "DBV": (42.56, 18.27), "SPU": (43.54, 16.30),
+    "KEF": (63.99, -22.62),
+    # North America
+    "JFK": (40.64, -73.78), "EWR": (40.69, -74.17), "LGA": (40.78, -73.87),
+    "LAX": (33.94, -118.41), "ORD": (41.97, -87.91), "MDW": (41.79, -87.75),
+    "SFO": (37.62, -122.38), "MIA": (25.80, -80.29), "FLL": (26.07, -80.15),
+    "BOS": (42.36, -71.01), "IAD": (38.94, -77.46), "DCA": (38.85, -77.04),
+    "BWI": (39.18, -76.67), "SEA": (47.45, -122.31), "DFW": (32.90, -97.04),
+    "DAL": (32.85, -96.85), "IAH": (29.98, -95.34), "HOU": (29.65, -95.28),
+    "ATL": (33.64, -84.43), "DEN": (39.86, -104.67), "LAS": (36.08, -115.15),
+    "PHX": (33.43, -112.01), "MCO": (28.43, -81.31), "DTW": (42.21, -83.35),
+    "MSP": (44.88, -93.22), "PHL": (39.87, -75.24),
+    "YYZ": (43.68, -79.63), "YTZ": (43.63, -79.40), "YUL": (45.47, -73.74),
+    "YVR": (49.19, -123.18), "MEX": (19.44, -99.07), "CUN": (21.04, -86.87),
+    # Asia
+    "NRT": (35.76, 140.39), "HND": (35.55, 139.78), "KIX": (34.43, 135.24),
+    "ICN": (37.46, 126.44), "GMP": (37.56, 126.79),
+    "PEK": (40.08, 116.58), "PKX": (39.51, 116.41),
+    "PVG": (31.14, 121.81), "SHA": (31.20, 121.34),
+    "HKG": (22.31, 113.91), "SIN": (1.36, 103.99),
+    "BKK": (13.69, 100.75), "DMK": (13.91, 100.61),
+    "KUL": (2.74, 101.70), "TPE": (25.08, 121.23),
+    "DEL": (28.56, 77.10), "BOM": (19.09, 72.87),
+    "DXB": (25.25, 55.36), "DWC": (24.90, 55.16),
+    "AUH": (24.43, 54.65), "DOH": (25.26, 51.61),
+    "RUH": (24.96, 46.70), "TLV": (32.01, 34.89),
+    "CGK": (-6.13, 106.66), "DPS": (-8.75, 115.17),
+    "MNL": (14.51, 121.02), "HAN": (21.22, 105.81), "SGN": (10.82, 106.65),
+    # Oceania
+    "SYD": (-33.95, 151.18), "MEL": (-37.67, 144.84),
+    "BNE": (-27.38, 153.12), "PER": (-31.94, 115.97), "AKL": (-37.01, 174.79),
+    # Africa
+    "CAI": (30.12, 31.41), "JNB": (-26.14, 28.25), "CPT": (-33.96, 18.60),
+    "NBO": (-1.32, 36.93), "RAK": (31.61, -8.04), "CMN": (33.37, -7.59),
+    # South America
+    "GRU": (-23.43, -46.47), "CGH": (-23.63, -46.66),
+    "GIG": (-22.81, -43.25), "SDU": (-22.91, -43.16),
+    "EZE": (-34.82, -58.54), "AEP": (-34.56, -58.42),
+    "BOG": (4.70, -74.15), "LIM": (-12.02, -77.11), "SCL": (-33.39, -70.79),
+    # Caribbean
+    "KIN": (17.94, -76.79), "NAS": (25.04, -77.47),
+    "BGI": (13.07, -59.49), "PUJ": (18.57, -68.36),
+    # Santiago de Compostela (from the bug report example)
+    "SCQ": (42.90, -8.42),
+}
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance between two points in km."""
+    import math
+    R = 6371  # Earth radius in km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = (math.sin(dlat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dlon / 2) ** 2)
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def estimate_max_nonstop_minutes(origin: str, destination: str) -> Optional[int]:
+    """Estimate the maximum plausible nonstop flight time between two airports.
+
+    Uses great-circle distance + generous buffer for wind, routing, taxiing.
+    Returns None if coordinates aren't available for either airport.
+
+    The formula:
+        - Average cruise speed: ~850 km/h
+        - Add 30 min for takeoff/climb/descent/taxi
+        - Add 25% buffer for headwinds and routing
+        - Result is the MAXIMUM plausible nonstop time
+    """
+    c1 = AIRPORT_COORDS.get(origin.upper())
+    c2 = AIRPORT_COORDS.get(destination.upper())
+    if not c1 or not c2:
+        return None
+
+    distance_km = _haversine_km(c1[0], c1[1], c2[0], c2[1])
+    cruise_speed_kmh = 850
+    flight_hours = distance_km / cruise_speed_kmh
+    flight_minutes = flight_hours * 60
+    # Add 45 min for takeoff/landing/taxi + 30% buffer for headwinds/routing
+    max_minutes = int(flight_minutes * 1.30 + 45)
+    return max_minutes
+
+
+def validate_stops(
+    stops: int,
+    duration_minutes: Optional[int],
+    origin: str,
+    destination: str,
+) -> int:
+    """Validate and correct the stop count using duration-based heuristics.
+
+    If a flight is marked as nonstop (stops=0) but its duration far exceeds
+    the maximum plausible nonstop time for the route, override to 1+ stops.
+    This catches cases where the regex-based stop detection is fooled by
+    page text containing "nonstop" or "direct" in unrelated contexts.
+
+    Returns the corrected stop count.
+    """
+    if stops > 0 or duration_minutes is None:
+        # Only validate nonstop claims; if stops>0 already, trust it
+        return stops
+
+    max_nonstop = estimate_max_nonstop_minutes(origin, destination)
+    if max_nonstop is None:
+        # No coordinate data — can't validate, trust the parser
+        return stops
+
+    if duration_minutes > max_nonstop:
+        # Duration exceeds max plausible nonstop time — this has stops
+        return 1
+
+    return stops
+
+
 def format_airport_display(code: str) -> str:
     """Format an airport code with its city name for display.
 
