@@ -208,6 +208,112 @@ async def run_search(args: argparse.Namespace) -> int:
     return 0
 
 
+async def run_date_range_search(args: argparse.Namespace) -> int:
+    """Execute a date range search across all date combinations."""
+    from airline_scraper.date_range import (
+        format_heatmap,
+        format_matrix_table,
+        generate_date_combinations,
+        search_date_range,
+    )
+
+    cabin_class = CabinClass(args.cabin)
+
+    # For date range mode, we use --date as dep_from and --date-to as dep_to
+    # Return dates use --return as ret_from and --return-to as ret_to
+    dep_from = args.date
+    dep_to = args.date_to if args.date_to else dep_from
+    ret_from = args.return_date
+    ret_to = args.return_to if args.return_to else ret_from
+
+    # Build a template request (dates will be overridden per combination)
+    trip_type = TripType.ONE_WAY if args.one_way else TripType.ROUND_TRIP
+    base_request = SearchRequest(
+        origin=args.origin,
+        destination=args.destination,
+        departure_date=dep_from,
+        return_date=ret_from,
+        trip_type=trip_type,
+        cabin_class=cabin_class,
+        adults=args.adults,
+        children=args.children,
+        currency=args.currency.upper(),
+        max_stops=args.max_stops,
+    )
+
+    # Generate date combinations
+    date_pairs = generate_date_combinations(
+        dep_from=dep_from,
+        dep_to=dep_to,
+        ret_from=ret_from if not args.one_way else None,
+        ret_to=ret_to if not args.one_way else None,
+        min_nights=args.min_nights,
+        max_nights=args.max_nights,
+    )
+
+    if not date_pairs:
+        print("No valid date combinations found. Check your date ranges.")
+        return 1
+
+    # Determine sources
+    sources = None
+    if args.source:
+        sources = [s.strip() for s in args.source.split(",")]
+
+    print(f"\nDate Range Search: {base_request.origin} → {base_request.destination}")
+    print(f"Departure dates: {dep_from} to {dep_to}")
+    if ret_from:
+        print(f"Return dates:    {ret_from} to {ret_to}")
+    print(f"Combinations:    {len(date_pairs)}")
+    print(f"Currency:        {base_request.currency}")
+    print(f"Sources:         {', '.join(sources) if sources else 'all'}")
+
+    # Estimate time
+    browser_sources = {"kayak", "skyscanner"}
+    if sources and not any(s in browser_sources for s in sources):
+        avg_delay = 5.5  # fast-flights only
+    else:
+        avg_delay = 30  # browser-based
+    est_minutes = (len(date_pairs) * avg_delay) / 60
+    print(f"Estimated time:  ~{est_minutes:.0f} minutes")
+    print()
+
+    # Run the search
+    def on_progress(idx, total, pair, result):
+        status = "OK" if result.cheapest else ("ERR" if result.error else "No results")
+        price = result.cheapest.price_display if result.cheapest else "—"
+        print(f"  [{idx + 1}/{total}] {pair.label}: {price} ({status})")
+
+    results = await search_date_range(
+        base_request=base_request,
+        date_pairs=date_pairs,
+        sources=sources,
+        progress_callback=on_progress,
+    )
+
+    # Display results
+    print()
+    print(format_matrix_table(results, base_request))
+
+    # Show heatmap if we have multiple dep + return dates
+    heatmap = format_heatmap(results, base_request)
+    if heatmap:
+        print()
+        print(heatmap)
+
+    # Summary
+    all_cheapest = [r.cheapest for r in results if r.cheapest]
+    if all_cheapest:
+        overall_cheapest = min(all_cheapest, key=lambda f: f.price)
+        best_pair = next(r for r in results if r.cheapest and r.cheapest.price == overall_cheapest.price)
+        print(f"\nBest deal: {overall_cheapest.price_display} on {best_pair.date_pair.label}")
+        print(f"  {overall_cheapest.outbound_summary} [{overall_cheapest.source.value}]")
+    else:
+        print("\nNo results found for any date combination.")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(
@@ -216,19 +322,29 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Round trip JFK to LAX
+  # Single date round trip
   python -m airline_scraper JFK LAX --date 2025-03-15 --return 2025-03-22
+
+  # Date range search — find cheapest across all date combinations
+  python -m airline_scraper LHR BCN --date 2025-06-01 --date-to 2025-06-07 \\
+      --return 2025-06-08 --return-to 2025-06-14
+
+  # Date range with constraints (5-9 night trips only)
+  python -m airline_scraper LHR CDG --date 2025-07-01 --date-to 2025-07-10 \\
+      --return 2025-07-05 --return-to 2025-07-20 \\
+      --min-nights 5 --max-nights 9
+
+  # Fast date range (Google Flights only, no browser needed)
+  python -m airline_scraper LHR FCO --date 2025-08-01 --date-to 2025-08-05 \\
+      --return 2025-08-08 --return-to 2025-08-12 \\
+      --source google_flights
 
   # One-way, business class
   python -m airline_scraper SFO LHR --date 2025-04-01 --one-way --cabin business
 
-  # Only search Google Flights, nonstop only
+  # Specific source, nonstop only, in EUR
   python -m airline_scraper ORD NRT --date 2025-05-10 --return 2025-05-20 \\
-      --source google_flights --max-stops 0
-
-  # Search with more passengers
-  python -m airline_scraper LAX CDG --date 2025-06-01 --return 2025-06-15 \\
-      --adults 2 --children 1
+      --source google_flights --max-stops 0 --currency EUR
         """,
     )
 
@@ -236,11 +352,27 @@ Examples:
     parser.add_argument("destination", help="Destination airport IATA code (e.g., LAX)")
     parser.add_argument(
         "--date", "-d", type=parse_date, required=True,
-        help="Departure date (YYYY-MM-DD)",
+        help="Departure date (YYYY-MM-DD). Start of range if --date-to is set.",
+    )
+    parser.add_argument(
+        "--date-to", type=parse_date,
+        help="End of departure date range (YYYY-MM-DD). Enables date range mode.",
     )
     parser.add_argument(
         "--return", "-r", type=parse_date, dest="return_date",
-        help="Return date (YYYY-MM-DD). Required unless --one-way is set.",
+        help="Return date (YYYY-MM-DD). Start of range if --return-to is set.",
+    )
+    parser.add_argument(
+        "--return-to", type=parse_date,
+        help="End of return date range (YYYY-MM-DD).",
+    )
+    parser.add_argument(
+        "--min-nights", type=int, default=1,
+        help="Minimum trip length in nights for date range mode (default: 1).",
+    )
+    parser.add_argument(
+        "--max-nights", type=int, default=None,
+        help="Maximum trip length in nights for date range mode (default: no limit).",
     )
     parser.add_argument(
         "--one-way", action="store_true",
@@ -281,7 +413,7 @@ Examples:
     )
     parser.add_argument(
         "--timeout", "-t", type=int, default=120,
-        help="Timeout in seconds for all scrapers (default: 120).",
+        help="Timeout in seconds per search (default: 120).",
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true",
@@ -291,19 +423,36 @@ Examples:
     return parser
 
 
+def _is_date_range_mode(args: argparse.Namespace) -> bool:
+    """Check if date range mode is active."""
+    return args.date_to is not None or args.return_to is not None
+
+
 def main():
     """CLI entry point."""
     parser = build_parser()
     args = parser.parse_args()
 
-    # Validate round-trip requires return date
+    # Validate
     if not args.one_way and args.return_date is None:
         parser.error("--return is required for round-trip searches. Use --one-way for one-way flights.")
+
+    if args.return_to and not args.return_date:
+        parser.error("--return-to requires --return to be set.")
+
+    if args.date_to and args.date_to < args.date:
+        parser.error("--date-to must be on or after --date.")
+
+    if args.return_to and args.return_date and args.return_to < args.return_date:
+        parser.error("--return-to must be on or after --return.")
 
     setup_logging(args.verbose)
 
     try:
-        exit_code = asyncio.run(run_search(args))
+        if _is_date_range_mode(args):
+            exit_code = asyncio.run(run_date_range_search(args))
+        else:
+            exit_code = asyncio.run(run_search(args))
     except KeyboardInterrupt:
         print("\nSearch cancelled.")
         exit_code = 130
