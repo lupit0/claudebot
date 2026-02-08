@@ -11,7 +11,12 @@ from typing import Optional
 
 from airline_scraper.models import CabinClass, FlightResult, SearchRequest, TripType
 from airline_scraper.orchestrator import SCRAPER_REGISTRY, merge_and_rank, search_all
-from airline_scraper.utils.airports import format_airport_display, get_airport_name, resolve_airport
+from airline_scraper.utils.airports import (
+    format_airport_display,
+    get_airport_name,
+    resolve_airport,
+    resolve_all_airports,
+)
 
 
 def setup_logging(verbose: bool = False):
@@ -209,13 +214,76 @@ def format_summary(results: list[FlightResult], request: SearchRequest) -> str:
 
 async def run_search(args: argparse.Namespace) -> int:
     """Execute the flight search."""
-    # Build the search request
     trip_type = TripType.ONE_WAY if args.one_way else TripType.ROUND_TRIP
     cabin_class = CabinClass(args.cabin)
 
-    request = SearchRequest(
-        origin=args.origin,
-        destination=args.destination,
+    # Determine which sources to search
+    sources = None
+    if args.source:
+        sources = [s.strip() for s in args.source.split(",")]
+
+    # Collect origin/destination codes to search
+    origin_codes = getattr(args, "_origin_codes", None) or [args.origin]
+    dest_codes = getattr(args, "_dest_codes", None) or [args.destination]
+
+    all_merged: list[FlightResult] = []
+
+    for origin in origin_codes:
+        for dest in dest_codes:
+            request = SearchRequest(
+                origin=origin,
+                destination=dest,
+                departure_date=args.date,
+                return_date=args.return_date,
+                trip_type=trip_type,
+                cabin_class=cabin_class,
+                adults=args.adults,
+                children=args.children,
+                currency=args.currency.upper(),
+                max_stops=args.max_stops,
+            )
+
+            origin_display = format_airport_display(request.origin)
+            dest_display = format_airport_display(request.destination)
+            print(f"\nSearching for flights: {origin_display} → {dest_display}")
+            print(f"Departure: {request.departure_date}", end="")
+            if request.return_date:
+                print(f"  Return: {request.return_date}")
+            else:
+                print(" (one-way)")
+            print(f"Currency: {request.currency}")
+            print(f"Sources: {', '.join(sources) if sources else 'all'}")
+            print()
+
+            # Run the search
+            results_by_source = await search_all(
+                request, sources=sources, timeout_seconds=args.timeout
+            )
+
+            # Report per-source results
+            for source_name, source_results in results_by_source.items():
+                print(f"  {source_name}: {len(source_results)} results")
+
+            # Merge and rank
+            merged = merge_and_rank(results_by_source, max_results=args.limit, max_stops=args.max_stops)
+            all_merged.extend(merged)
+
+    # Sort all results by price and limit
+    all_merged.sort(key=lambda r: r.price)
+    all_merged = all_merged[: args.limit]
+
+    if not all_merged:
+        print("\nNo flights found. Try different dates or sources.")
+        return 1
+
+    # Display results
+    print(format_results_table(all_merged))
+    print(format_booking_links(all_merged))
+
+    # Use the primary request for summary
+    primary_request = SearchRequest(
+        origin=origin_codes[0],
+        destination=dest_codes[0],
         departure_date=args.date,
         return_date=args.return_date,
         trip_type=trip_type,
@@ -225,49 +293,12 @@ async def run_search(args: argparse.Namespace) -> int:
         currency=args.currency.upper(),
         max_stops=args.max_stops,
     )
-
-    # Determine which sources to search
-    sources = None
-    if args.source:
-        sources = [s.strip() for s in args.source.split(",")]
-
-    origin_display = format_airport_display(request.origin)
-    dest_display = format_airport_display(request.destination)
-    print(f"\nSearching for flights: {origin_display} → {dest_display}")
-    print(f"Departure: {request.departure_date}", end="")
-    if request.return_date:
-        print(f"  Return: {request.return_date}")
-    else:
-        print(" (one-way)")
-    print(f"Currency: {request.currency}")
-    print(f"Sources: {', '.join(sources) if sources else 'all'}")
-    print()
-
-    # Run the search
-    results_by_source = await search_all(
-        request, sources=sources, timeout_seconds=args.timeout
-    )
-
-    # Report per-source results
-    for source_name, source_results in results_by_source.items():
-        print(f"  {source_name}: {len(source_results)} results")
-
-    # Merge and rank
-    merged = merge_and_rank(results_by_source, max_results=args.limit)
-
-    if not merged:
-        print("\nNo flights found. Try different dates or sources.")
-        return 1
-
-    # Display results
-    print(format_results_table(merged))
-    print(format_booking_links(merged))
-    print(format_summary(merged, request))
+    print(format_summary(all_merged, primary_request))
 
     # Export to file if --output is specified
     output_path = getattr(args, "output", None)
-    if output_path and merged:
-        _export_single_search(merged, request, output_path)
+    if output_path and all_merged:
+        _export_single_search(all_merged, primary_request, output_path)
 
     return 0
 
@@ -282,11 +313,14 @@ def _export_single_search(
 
     rows = []
     for f in flights:
+        # Use actual airport from flight leg if available (for multi-airport searches)
+        origin = f.outbound.departure_airport if f.outbound else request.origin
+        destination = f.outbound.arrival_airport if f.outbound else request.destination
         row = {
-            "origin": request.origin,
-            "origin_airport": get_airport_name(request.origin),
-            "destination": request.destination,
-            "destination_airport": get_airport_name(request.destination),
+            "origin": origin,
+            "origin_airport": get_airport_name(origin),
+            "destination": destination,
+            "destination_airport": get_airport_name(destination),
             "departure_date": request.departure_date.isoformat(),
             "return_date": request.return_date.isoformat() if request.return_date else "",
             "currency": f.currency,
@@ -351,20 +385,11 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
     ret_from = args.return_date
     ret_to = args.return_to if args.return_to else ret_from
 
-    # Build a template request (dates will be overridden per combination)
     trip_type = TripType.ONE_WAY if args.one_way else TripType.ROUND_TRIP
-    base_request = SearchRequest(
-        origin=args.origin,
-        destination=args.destination,
-        departure_date=dep_from,
-        return_date=ret_from,
-        trip_type=trip_type,
-        cabin_class=cabin_class,
-        adults=args.adults,
-        children=args.children,
-        currency=args.currency.upper(),
-        max_stops=args.max_stops,
-    )
+
+    # Collect origin/destination codes (multi-airport cities)
+    origin_codes = getattr(args, "_origin_codes", None) or [args.origin]
+    dest_codes = getattr(args, "_dest_codes", None) or [args.destination]
 
     # Generate date combinations
     date_pairs = generate_date_combinations(
@@ -385,14 +410,19 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
     if args.source:
         sources = [s.strip() for s in args.source.split(",")]
 
-    origin_display = format_airport_display(base_request.origin)
-    dest_display = format_airport_display(base_request.destination)
-    print(f"\nDate Range Search: {origin_display} → {dest_display}")
+    total_airport_combos = len(origin_codes) * len(dest_codes)
+    total_searches = total_airport_combos * len(date_pairs)
+    print(f"\nDate Range Search")
+    print(f"Origins:         {', '.join(format_airport_display(c) for c in origin_codes)}")
+    print(f"Destinations:    {', '.join(format_airport_display(c) for c in dest_codes)}")
     print(f"Departure dates: {dep_from} to {dep_to}")
     if ret_from:
         print(f"Return dates:    {ret_from} to {ret_to}")
-    print(f"Combinations:    {len(date_pairs)}")
-    print(f"Currency:        {base_request.currency}")
+    print(f"Date combos:     {len(date_pairs)}")
+    if total_airport_combos > 1:
+        print(f"Airport combos:  {total_airport_combos}")
+    print(f"Total searches:  {total_searches}")
+    print(f"Currency:        {args.currency.upper()}")
     print(f"Sources:         {', '.join(sources) if sources else 'all'}")
 
     # Estimate time
@@ -401,29 +431,81 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
         avg_delay = 5.5  # fast-flights only
     else:
         avg_delay = 30  # browser-based
-    est_minutes = (len(date_pairs) * avg_delay) / 60
+    est_minutes = (total_searches * avg_delay) / 60
     print(f"Estimated time:  ~{est_minutes:.0f} minutes")
     print()
 
-    # Run the search
-    def on_progress(idx, total, pair, result):
-        status = "OK" if result.cheapest else ("ERR" if result.error else "No results")
-        price = result.cheapest.price_display if result.cheapest else "—"
-        print(f"  [{idx + 1}/{total}] {pair.label}: {price} ({status})")
+    all_results = []
 
-    results = await search_date_range(
-        base_request=base_request,
-        date_pairs=date_pairs,
-        sources=sources,
-        progress_callback=on_progress,
+    # Search each origin-destination airport combination
+    for origin in origin_codes:
+        for dest in dest_codes:
+            base_request = SearchRequest(
+                origin=origin,
+                destination=dest,
+                departure_date=dep_from,
+                return_date=ret_from,
+                trip_type=trip_type,
+                cabin_class=cabin_class,
+                adults=args.adults,
+                children=args.children,
+                currency=args.currency.upper(),
+                max_stops=args.max_stops,
+            )
+
+            if total_airport_combos > 1:
+                print(f"--- {format_airport_display(origin)} → {format_airport_display(dest)} ---")
+
+            def on_progress(idx, total, pair, result):
+                status = "OK" if result.cheapest else ("ERR" if result.error else "No results")
+                price = result.cheapest.price_display if result.cheapest else "—"
+                airport_tag = f" [{origin}→{dest}]" if total_airport_combos > 1 else ""
+                print(f"  [{idx + 1}/{total}] {pair.label}: {price} ({status}){airport_tag}")
+
+            results = await search_date_range(
+                base_request=base_request,
+                date_pairs=date_pairs,
+                sources=sources,
+                progress_callback=on_progress,
+            )
+            all_results.extend(results)
+
+    # For display, use the primary base_request
+    primary_request = SearchRequest(
+        origin=origin_codes[0],
+        destination=dest_codes[0],
+        departure_date=dep_from,
+        return_date=ret_from,
+        trip_type=trip_type,
+        cabin_class=cabin_class,
+        adults=args.adults,
+        children=args.children,
+        currency=args.currency.upper(),
+        max_stops=args.max_stops,
     )
+
+    # When multiple airports, merge results per date pair (keep cheapest across airports)
+    if total_airport_combos > 1:
+        from collections import defaultdict
+        by_dates: dict[str, list] = defaultdict(list)
+        for r in all_results:
+            key = r.date_pair.label
+            by_dates[key].append(r)
+        # For each date pair, pick the result with the cheapest price
+        merged_results = []
+        for _key, date_results in by_dates.items():
+            best = min(date_results, key=lambda r: r.cheapest.price if r.cheapest else float("inf"))
+            merged_results.append(best)
+        results = sorted(merged_results, key=lambda r: (r.date_pair.departure, r.date_pair.return_date or r.date_pair.departure))
+    else:
+        results = all_results
 
     # Display results
     print()
-    print(format_matrix_table(results, base_request))
+    print(format_matrix_table(results, primary_request))
 
     # Show heatmap if we have multiple dep + return dates
-    heatmap = format_heatmap(results, base_request)
+    heatmap = format_heatmap(results, primary_request)
     if heatmap:
         print()
         print(heatmap)
@@ -445,11 +527,11 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
     if output_path:
         all_flights_flag = getattr(args, "all_flights", False)
         if output_path.endswith(".json"):
-            written = export_json(results, base_request, output_path, all_flights=all_flights_flag)
+            written = export_json(results, primary_request, output_path, all_flights=all_flights_flag)
             print(f"\nExported to JSON: {written}")
         else:
             # Default to CSV (including .csv, .tsv, or any other extension)
-            written = export_csv(results, base_request, output_path, all_flights=all_flights_flag)
+            written = export_csv(results, primary_request, output_path, all_flights=all_flights_flag)
             print(f"\nExported to CSV: {written}")
 
     return 0
@@ -466,8 +548,13 @@ Examples:
   # Single date round trip (airport codes)
   python -m airline_scraper JFK LAX --date 2025-03-15 --return 2025-03-22
 
-  # Use city names instead of airport codes
+  # Use city names — automatically searches ALL airports in that city
+  # (e.g., London searches LHR, LGW, STN, LTN, SEN, LCY)
   python -m airline_scraper London Barcelona --date 2025-06-01 --return 2025-06-08
+
+  # Use a specific airport name to search just one
+  python -m airline_scraper "London Gatwick" Barcelona --date 2025-06-01 --return 2025-06-08
+  python -m airline_scraper Heathrow Barcelona --date 2025-06-01 --return 2025-06-08
 
   # City names with spaces (use quotes)
   python -m airline_scraper "New York" Paris --date 2025-06-01 --return 2025-06-08
@@ -631,20 +718,23 @@ def main():
     if args.return_to and args.return_date and args.return_to < args.return_date:
         parser.error("--return-to must be on or after --return.")
 
-    # Resolve city names to airport codes
+    # Resolve city names to airport codes.
+    # When a city has multiple airports, resolve ALL of them and search each.
     try:
-        origin_code, origin_warning = resolve_airport(args.origin)
-        args.origin = origin_code
-        if origin_warning:
-            print(f"  Origin: {origin_warning}")
+        origin_codes, origin_msg = resolve_all_airports(args.origin)
+        args.origin = origin_codes[0]  # Primary origin for SearchRequest
+        args._origin_codes = origin_codes  # All origins for multi-search
+        if origin_msg:
+            print(f"  Origin: {origin_msg}")
     except ValueError as e:
         parser.error(str(e))
 
     try:
-        dest_code, dest_warning = resolve_airport(args.destination)
-        args.destination = dest_code
-        if dest_warning:
-            print(f"  Destination: {dest_warning}")
+        dest_codes, dest_msg = resolve_all_airports(args.destination)
+        args.destination = dest_codes[0]
+        args._dest_codes = dest_codes
+        if dest_msg:
+            print(f"  Destination: {dest_msg}")
     except ValueError as e:
         parser.error(str(e))
 

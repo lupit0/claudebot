@@ -101,6 +101,7 @@ async def search_all(
 def merge_and_rank(
     results: dict[str, list[FlightResult]],
     max_results: int = 20,
+    max_stops: Optional[int] = None,
 ) -> list[FlightResult]:
     """Merge results from multiple sources and rank by price.
 
@@ -110,6 +111,19 @@ def merge_and_rank(
     all_flights: list[FlightResult] = []
     for source_results in results.values():
         all_flights.extend(source_results)
+
+    # Post-filter by max_stops as a safety net (some scrapers may not
+    # filter server-side, or may return flights that bypass the filter).
+    if max_stops is not None:
+        filtered = []
+        for f in all_flights:
+            stops = f.outbound.stops if f.outbound else 0
+            if stops <= max_stops:
+                filtered.append(f)
+        dropped = len(all_flights) - len(filtered)
+        if dropped:
+            logger.info(f"Filtered out {dropped} flights exceeding {max_stops} stops")
+        all_flights = filtered
 
     # Sort by price
     all_flights.sort(key=lambda f: f.price)

@@ -157,7 +157,7 @@ async def search_date_range(
             results_by_source = await search_all(
                 request, sources=sources, timeout_seconds=60
             )
-            merged = merge_and_rank(results_by_source, max_results=max_results_per_pair)
+            merged = merge_and_rank(results_by_source, max_results=max_results_per_pair, max_stops=base_request.max_stops)
             pair_result.flights = merged
             if merged:
                 pair_result.cheapest = merged[0]

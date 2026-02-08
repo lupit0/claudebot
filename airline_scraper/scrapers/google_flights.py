@@ -225,6 +225,10 @@ class GoogleFlightsScraper(BaseScraper):
 
         url += f"&curr={request.currency}"
 
+        # Add stops filter for Google Flights URL
+        if request.max_stops is not None:
+            url += f"&stops={request.max_stops}"
+
         results = []
 
         try:

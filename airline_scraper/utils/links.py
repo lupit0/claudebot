@@ -37,7 +37,10 @@ def google_flights_link(request: SearchRequest) -> str:
     q += cabin_map.get(request.cabin_class, "")
 
     q_encoded = q.replace(" ", "+")
-    return f"https://www.google.com/travel/flights?q={q_encoded}&curr={request.currency}"
+    url = f"https://www.google.com/travel/flights?q={q_encoded}&curr={request.currency}"
+    if request.max_stops is not None:
+        url += f"&stops={request.max_stops}"
+    return url
 
 
 def kayak_link(request: SearchRequest) -> str:
@@ -116,6 +119,11 @@ def skyscanner_link(request: SearchRequest) -> str:
 
     if request.children:
         url += "&childrenv2=" + "%7C".join(["8"] * request.children)
+    if request.max_stops is not None:
+        if request.max_stops == 0:
+            url += "&stops=direct"
+        elif request.max_stops == 1:
+            url += "&stops=!twoPlusStops"
     return url
 
 

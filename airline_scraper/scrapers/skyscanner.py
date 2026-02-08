@@ -80,6 +80,13 @@ class SkyscannerScraper(BaseScraper):
                 f"&rtn=0"
             )
 
+        # Add stops filter if specified
+        if request.max_stops is not None:
+            if request.max_stops == 0:
+                url += "&stops=direct"
+            elif request.max_stops == 1:
+                url += "&stops=!twoPlusStops"
+
         results = []
 
         try:

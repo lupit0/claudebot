@@ -307,12 +307,37 @@ AIRPORT_INFO: dict[str, tuple[str, str]] = {
 }
 
 
+def _build_name_to_code_map() -> dict[str, str]:
+    """Build a reverse lookup from airport name keywords to IATA codes.
+
+    Enables lookups like "London Gatwick" → LGW, "Heathrow" → LHR,
+    "Narita" → NRT, "JFK" → JFK, etc.
+    """
+    name_map: dict[str, str] = {}
+    for code, (name, _country) in AIRPORT_INFO.items():
+        # Full name: "London Heathrow" → LHR
+        name_map[name.lower()] = code
+        # Individual words (skip very short/generic ones)
+        for word in name.split():
+            w = word.lower().strip("()/")
+            if len(w) >= 4 and w not in {"city", "international", "field", "world", "central"}:
+                # Only set if not already mapped (first code wins for ambiguous words)
+                if w not in name_map:
+                    name_map[w] = code
+    return name_map
+
+
+_NAME_TO_CODE: dict[str, str] = _build_name_to_code_map()
+
+
 def resolve_airport(input_str: str) -> tuple[str, Optional[str]]:
-    """Resolve a city name or airport code to an IATA code.
+    """Resolve a city name, airport name, or airport code to an IATA code.
 
     Args:
-        input_str: Either a 3-letter IATA code (e.g., "LHR") or a city name
-                   (e.g., "London", "New York", "paris").
+        input_str: One of:
+            - 3-letter IATA code (e.g., "LHR")
+            - City name (e.g., "London", "New York", "paris")
+            - Airport name (e.g., "London Gatwick", "Heathrow", "Narita")
 
     Returns:
         Tuple of (IATA code, warning message or None).
@@ -328,43 +353,102 @@ def resolve_airport(input_str: str) -> tuple[str, Optional[str]]:
     if len(cleaned) == 3 and cleaned.isalpha():
         return cleaned.upper(), None
 
-    # Try to match as a city name (case-insensitive)
-    city_key = cleaned.lower()
+    lower = cleaned.lower()
+
+    # Try to match as a city name FIRST (e.g., "London" → LHR with multi-airport warning)
+    # This must come before airport name matching so "London" shows all airports,
+    # not just matching "London Heathrow".
+    city_key = lower
     if city_key in CITY_TO_AIRPORTS:
         airports = CITY_TO_AIRPORTS[city_key]
         main = airports[0]
         warning = None
         if len(airports) > 1:
-            alt_list = ", ".join(airports[1:])
+            alts = [f"{c} ({get_airport_name(c)})" for c in airports[1:]]
             main_name = get_airport_name(main)
+            # Build a context-specific tip using this city's second airport
+            alt_name = get_airport_name(airports[1])
             warning = (
                 f'"{cleaned}" has multiple airports. '
                 f"Using {main} ({main_name}). "
-                f"Alternatives: {alt_list}"
+                f"Alternatives: {', '.join(alts)}. "
+                f'Tip: use a specific name (e.g., "{alt_name}") or '
+                f"IATA code (e.g., {airports[1]}) to pick just one."
             )
         return main, warning
 
-    # Try partial matching (e.g., "san fran" matches "san francisco")
+    # Try to match as a specific airport name (e.g. "London Gatwick" → LGW, "Heathrow" → LHR)
+    if lower in _NAME_TO_CODE:
+        code = _NAME_TO_CODE[lower]
+        name = get_airport_name(code)
+        return code, f'Matched "{cleaned}" to {code} ({name})'
+
+    # Try partial matching on city names (e.g., "san fran" matches "san francisco")
     for city, airports in CITY_TO_AIRPORTS.items():
         if city.startswith(city_key) or city_key in city:
             main = airports[0]
             main_name = get_airport_name(main)
             warning = None
             if len(airports) > 1:
-                alt_list = ", ".join(airports[1:])
+                alts = [f"{c} ({get_airport_name(c)})" for c in airports[1:]]
                 warning = (
                     f'Matched "{cleaned}" to {city.title()}. '
                     f"Using {main} ({main_name}). "
-                    f"Alternatives: {alt_list}"
+                    f"Alternatives: {', '.join(alts)}. "
+                    f'Tip: use a specific name (e.g., "{city.title()} {get_airport_name(airports[1]).split()[-1]}") '
+                    f"or IATA code (e.g., {airports[1]}) to pick one."
                 )
             else:
                 warning = f'Matched "{cleaned}" to {city.title()} ({main})'
             return main, warning
 
+    # Try partial matching on airport names
+    for name_key, code in _NAME_TO_CODE.items():
+        if city_key in name_key or name_key.startswith(city_key):
+            name = get_airport_name(code)
+            return code, f'Matched "{cleaned}" to {code} ({name})'
+
     raise ValueError(
         f'Could not resolve "{cleaned}" to an airport. '
-        f"Use a 3-letter IATA code (e.g., LHR) or a city name (e.g., London)."
+        f"Use a 3-letter IATA code (e.g., LHR), a city name (e.g., London), "
+        f'or an airport name (e.g., "London Gatwick", "Heathrow").'
     )
+
+
+def resolve_all_airports(input_str: str) -> tuple[list[str], Optional[str]]:
+    """Resolve a city name to ALL its airports (for multi-airport search).
+
+    For a city like London, returns all 6 airports instead of just LHR.
+    For a specific airport name or IATA code, returns just that one.
+
+    Returns:
+        Tuple of (list of IATA codes, info message or None).
+    """
+    cleaned = input_str.strip()
+
+    # If it's a 3-letter code, return just that
+    if len(cleaned) == 3 and cleaned.isalpha():
+        return [cleaned.upper()], None
+
+    lower = cleaned.lower()
+
+    # City name check FIRST — "London" should return all London airports
+    if lower in CITY_TO_AIRPORTS:
+        airports = CITY_TO_AIRPORTS[lower]
+        if len(airports) > 1:
+            names = [f"{c} ({get_airport_name(c)})" for c in airports]
+            msg = f'"{cleaned}" has {len(airports)} airports: {", ".join(names)}. Searching all.'
+            return airports, msg
+        return airports, None
+
+    # Specific airport name (e.g. "London Gatwick" → just LGW)
+    if lower in _NAME_TO_CODE:
+        code = _NAME_TO_CODE[lower]
+        return [code], f'Matched "{cleaned}" to {code} ({get_airport_name(code)})'
+
+    # Fall back to single resolve
+    code, warning = resolve_airport(input_str)
+    return [code], warning
 
 
 def get_airport_name(code: str) -> str:
