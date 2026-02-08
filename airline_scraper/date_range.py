@@ -7,10 +7,14 @@ combinations and searches them with appropriate delays to avoid detection.
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
+import json
 import logging
 import random
 from dataclasses import dataclass, field
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 from airline_scraper.models import FlightResult, SearchRequest, TripType
@@ -344,3 +348,182 @@ def format_heatmap(
                     row += lookup.get((dep, ret), "—").rjust(col_width)
             lines.append(row)
         return "\n".join(lines)
+
+
+def _result_to_row(r: DatePairResult, request: SearchRequest) -> dict:
+    """Convert a DatePairResult to a flat dict for export."""
+    row = {
+        "origin": request.origin,
+        "destination": request.destination,
+        "departure_date": r.date_pair.departure.isoformat(),
+        "return_date": r.date_pair.return_date.isoformat() if r.date_pair.return_date else "",
+        "nights": (r.date_pair.return_date - r.date_pair.departure).days if r.date_pair.return_date else "",
+        "currency": request.currency,
+        "cheapest_price": "",
+        "airline": "",
+        "stops": "",
+        "duration_minutes": "",
+        "duration": "",
+        "source": "",
+        "results_count": len(r.flights),
+        "error": r.error or "",
+    }
+    if r.cheapest:
+        f = r.cheapest
+        row["cheapest_price"] = f.price
+        row["source"] = f.source.value
+        if f.outbound:
+            row["airline"] = f.outbound.airline
+            row["stops"] = f.outbound.stops
+            row["duration_minutes"] = f.outbound.duration_minutes or ""
+            if f.outbound.duration_minutes:
+                h, m = divmod(f.outbound.duration_minutes, 60)
+                row["duration"] = f"{h}h {m:02d}m"
+    return row
+
+
+def _all_flights_rows(results: list[DatePairResult], request: SearchRequest) -> list[dict]:
+    """Flatten ALL flights (not just cheapest) into rows for export."""
+    rows = []
+    for r in results:
+        for f in r.flights:
+            row = {
+                "origin": request.origin,
+                "destination": request.destination,
+                "departure_date": r.date_pair.departure.isoformat(),
+                "return_date": r.date_pair.return_date.isoformat() if r.date_pair.return_date else "",
+                "nights": (r.date_pair.return_date - r.date_pair.departure).days if r.date_pair.return_date else "",
+                "currency": f.currency,
+                "price": f.price,
+                "airline": f.outbound.airline if f.outbound else "",
+                "stops": f.outbound.stops if f.outbound else "",
+                "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
+                "source": f.source.value,
+            }
+            if f.outbound and f.outbound.duration_minutes:
+                h, m = divmod(f.outbound.duration_minutes, 60)
+                row["duration"] = f"{h}h {m:02d}m"
+            else:
+                row["duration"] = ""
+            rows.append(row)
+    return rows
+
+
+def export_csv(
+    results: list[DatePairResult],
+    request: SearchRequest,
+    output_path: str,
+    all_flights: bool = False,
+) -> str:
+    """Export results to a CSV file.
+
+    Args:
+        results: The search results.
+        request: The base search request.
+        output_path: File path to write to.
+        all_flights: If True, export every flight found (not just cheapest per date).
+                     If False, export one row per date combination (cheapest only).
+
+    Returns:
+        The path written to.
+    """
+    if all_flights:
+        rows = _all_flights_rows(results, request)
+    else:
+        rows = [_result_to_row(r, request) for r in results]
+
+    if not rows:
+        rows = [{"info": "No results found"}]
+
+    path = Path(output_path)
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return str(path)
+
+
+def export_json(
+    results: list[DatePairResult],
+    request: SearchRequest,
+    output_path: str,
+    all_flights: bool = False,
+) -> str:
+    """Export results to a JSON file.
+
+    Args:
+        results: The search results.
+        request: The base search request.
+        output_path: File path to write to.
+        all_flights: If True, export every flight found.
+
+    Returns:
+        The path written to.
+    """
+    if all_flights:
+        rows = _all_flights_rows(results, request)
+    else:
+        rows = [_result_to_row(r, request) for r in results]
+
+    data = {
+        "search": {
+            "origin": request.origin,
+            "destination": request.destination,
+            "currency": request.currency,
+            "cabin_class": request.cabin_class.value,
+            "adults": request.adults,
+            "children": request.children,
+        },
+        "results": rows,
+    }
+
+    path = Path(output_path)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, default=str)
+
+    return str(path)
+
+
+def results_to_dataframe(
+    results: list[DatePairResult],
+    request: SearchRequest,
+    all_flights: bool = False,
+):
+    """Convert results to a pandas DataFrame.
+
+    Requires pandas to be installed. Returns a DataFrame with one row
+    per date combination (cheapest) or one row per flight (all_flights=True).
+    """
+    try:
+        import pandas as pd
+    except ImportError:
+        raise ImportError(
+            "pandas is required for DataFrame export. "
+            "Install with: pip install pandas"
+        )
+
+    if all_flights:
+        rows = _all_flights_rows(results, request)
+    else:
+        rows = [_result_to_row(r, request) for r in results]
+
+    df = pd.DataFrame(rows)
+
+    # Convert numeric columns
+    price_col = "price" if all_flights else "cheapest_price"
+    if price_col in df.columns:
+        df[price_col] = pd.to_numeric(df[price_col], errors="coerce")
+    if "stops" in df.columns:
+        df["stops"] = pd.to_numeric(df["stops"], errors="coerce")
+    if "duration_minutes" in df.columns:
+        df["duration_minutes"] = pd.to_numeric(df["duration_minutes"], errors="coerce")
+    if "nights" in df.columns:
+        df["nights"] = pd.to_numeric(df["nights"], errors="coerce")
+
+    # Convert date columns
+    for col in ["departure_date", "return_date"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+
+    return df

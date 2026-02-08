@@ -205,12 +205,72 @@ async def run_search(args: argparse.Namespace) -> int:
     print(format_results_table(merged))
     print(format_summary(merged, request))
 
+    # Export to file if --output is specified
+    output_path = getattr(args, "output", None)
+    if output_path and merged:
+        _export_single_search(merged, request, output_path)
+
     return 0
+
+
+def _export_single_search(
+    flights: list[FlightResult], request: SearchRequest, output_path: str
+):
+    """Export a single search's results to CSV or JSON."""
+    import csv as csv_mod
+    import json as json_mod
+    from pathlib import Path
+
+    rows = []
+    for f in flights:
+        row = {
+            "origin": request.origin,
+            "destination": request.destination,
+            "departure_date": request.departure_date.isoformat(),
+            "return_date": request.return_date.isoformat() if request.return_date else "",
+            "currency": f.currency,
+            "price": f.price,
+            "airline": f.outbound.airline if f.outbound else "",
+            "stops": f.outbound.stops if f.outbound else "",
+            "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
+            "source": f.source.value,
+        }
+        if f.outbound and f.outbound.duration_minutes:
+            h, m = divmod(f.outbound.duration_minutes, 60)
+            row["duration"] = f"{h}h {m:02d}m"
+        else:
+            row["duration"] = ""
+        rows.append(row)
+
+    path = Path(output_path)
+    if output_path.endswith(".json"):
+        data = {
+            "search": {
+                "origin": request.origin,
+                "destination": request.destination,
+                "departure_date": request.departure_date.isoformat(),
+                "return_date": request.return_date.isoformat() if request.return_date else None,
+                "currency": request.currency,
+                "cabin_class": request.cabin_class.value,
+            },
+            "results": rows,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json_mod.dump(data, f, indent=2, default=str)
+        print(f"\nExported to JSON: {path}")
+    else:
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv_mod.DictWriter(f, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+        print(f"\nExported to CSV: {path}")
 
 
 async def run_date_range_search(args: argparse.Namespace) -> int:
     """Execute a date range search across all date combinations."""
     from airline_scraper.date_range import (
+        export_csv,
+        export_json,
         format_heatmap,
         format_matrix_table,
         generate_date_combinations,
@@ -311,6 +371,18 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
     else:
         print("\nNo results found for any date combination.")
 
+    # Export to file if --output is specified
+    output_path = getattr(args, "output", None)
+    if output_path:
+        all_flights_flag = getattr(args, "all_flights", False)
+        if output_path.endswith(".json"):
+            written = export_json(results, base_request, output_path, all_flights=all_flights_flag)
+            print(f"\nExported to JSON: {written}")
+        else:
+            # Default to CSV (including .csv, .tsv, or any other extension)
+            written = export_csv(results, base_request, output_path, all_flights=all_flights_flag)
+            print(f"\nExported to CSV: {written}")
+
     return 0
 
 
@@ -338,6 +410,16 @@ Examples:
   python -m airline_scraper LHR FCO --date 2025-08-01 --date-to 2025-08-05 \\
       --return 2025-08-08 --return-to 2025-08-12 \\
       --source google_flights
+
+  # Export date range results to CSV (opens in Excel/Google Sheets)
+  python -m airline_scraper LHR BCN --date 2025-06-01 --date-to 2025-06-07 \\
+      --return 2025-06-08 --return-to 2025-06-14 \\
+      --output results.csv
+
+  # Export ALL flights (not just cheapest) to JSON
+  python -m airline_scraper LHR BCN --date 2025-06-01 --date-to 2025-06-07 \\
+      --return 2025-06-08 --return-to 2025-06-14 \\
+      --output results.json --all-flights
 
   # One-way, business class
   python -m airline_scraper SFO LHR --date 2025-04-01 --one-way --cabin business
@@ -414,6 +496,21 @@ Examples:
     parser.add_argument(
         "--timeout", "-t", type=int, default=120,
         help="Timeout in seconds per search (default: 120).",
+    )
+    parser.add_argument(
+        "--output", "-o",
+        help=(
+            "Export date range results to a file. "
+            "Use .csv for CSV (opens in Excel/Sheets) or .json for JSON. "
+            "Example: --output results.csv"
+        ),
+    )
+    parser.add_argument(
+        "--all-flights", action="store_true",
+        help=(
+            "When exporting, include ALL flights found per date combo, "
+            "not just the cheapest. Produces a larger file with full comparison data."
+        ),
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true",
