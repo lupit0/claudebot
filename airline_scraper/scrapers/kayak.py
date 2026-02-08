@@ -28,6 +28,7 @@ from airline_scraper.models import (
 from airline_scraper.scrapers.base import BaseScraper
 from airline_scraper.utils.browser import (
     create_browser,
+    dismiss_cookie_consent,
     human_delay,
     human_scroll,
     wait_for_content,
@@ -95,16 +96,8 @@ class KayakScraper(BaseScraper):
                 await human_delay(3, 6)
 
                 # Dismiss any cookie consent dialogs
-                try:
-                    consent_btn = page.locator(
-                        "button:has-text('Accept'), button:has-text('OK'), "
-                        "button:has-text('Agree'), .dCnC-mod-close"
-                    )
-                    if await consent_btn.count() > 0:
-                        await consent_btn.first.click()
-                        await human_delay(1, 2)
-                except Exception:
-                    pass
+                await dismiss_cookie_consent(page)
+                await human_delay(1, 2)
 
                 # Now navigate to the search URL
                 logger.info(f"Navigating to Kayak search: {url}")

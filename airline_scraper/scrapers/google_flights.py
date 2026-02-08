@@ -202,6 +202,7 @@ class GoogleFlightsScraper(BaseScraper):
         """Fallback: scrape Google Flights using Patchright browser automation."""
         from airline_scraper.utils.browser import (
             create_browser,
+            dismiss_cookie_consent,
             human_delay,
             human_scroll,
             wait_for_content,
@@ -220,13 +221,7 @@ class GoogleFlightsScraper(BaseScraper):
             ret_date = request.return_date.strftime("%Y-%m-%d")
             url += f"+return+{ret_date}"
 
-        cabin_param = {
-            CabinClass.ECONOMY: "1",
-            CabinClass.PREMIUM_ECONOMY: "2",
-            CabinClass.BUSINESS: "3",
-            CabinClass.FIRST: "4",
-        }
-        url += f"&curr=USD"
+        url += "&curr=USD"
 
         results = []
 
@@ -234,9 +229,22 @@ class GoogleFlightsScraper(BaseScraper):
             async with create_browser(headless=headless) as (page, context):
                 logger.info(f"Navigating to Google Flights: {url}")
                 await page.goto(url, wait_until="domcontentloaded")
-                await human_delay(3, 6)
+                await human_delay(2, 4)
+
+                # Dismiss cookie consent (Google shows this in EU regions)
+                await dismiss_cookie_consent(page)
+                await human_delay(1, 2)
+
                 await human_scroll(page)
                 await human_delay(2, 4)
+
+                # If consent redirected us, navigate back to the flights page
+                if "travel/flights" not in page.url:
+                    logger.info("Re-navigating to Google Flights after consent...")
+                    await page.goto(url, wait_until="domcontentloaded")
+                    await human_delay(3, 5)
+                    await dismiss_cookie_consent(page)
+                    await human_delay(1, 2)
 
                 # Wait for flight results to load
                 # Google Flights renders results in list items

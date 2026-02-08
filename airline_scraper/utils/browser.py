@@ -138,6 +138,121 @@ async def create_browser(
                 await browser.close()
 
 
+async def dismiss_cookie_consent(page, timeout: int = 5000) -> bool:
+    """Attempt to dismiss cookie consent dialogs (GDPR, CCPA, etc.).
+
+    Tries multiple common consent button patterns used by:
+    - Google (consent.google.com)
+    - OneTrust, CookieBot, TrustArc
+    - Kayak, Skyscanner, and other travel sites
+    - Generic EU consent banners
+
+    Returns True if a consent dialog was found and dismissed.
+    """
+    # Comprehensive list of selectors for consent buttons across sites
+    consent_selectors = [
+        # Google consent (consent.google.com iframe or redirect)
+        "button:has-text('Accept all')",
+        "button:has-text('Accept All')",
+        "button:has-text('Reject all')",
+        "button:has-text('Reject All')",
+        "button:has-text('Tout accepter')",  # French
+        "button:has-text('Alle akzeptieren')",  # German
+        "button:has-text('Aceptar todo')",  # Spanish
+        "button:has-text('Accetta tutto')",  # Italian
+        # Generic consent patterns
+        "button:has-text('Accept')",
+        "button:has-text('Accept cookies')",
+        "button:has-text('Accept Cookies')",
+        "button:has-text('I agree')",
+        "button:has-text('I Agree')",
+        "button:has-text('Agree')",
+        "button:has-text('Allow all')",
+        "button:has-text('Allow All')",
+        "button:has-text('Allow cookies')",
+        "button:has-text('Got it')",
+        "button:has-text('OK')",
+        "button:has-text('Continue')",
+        # ID / class based selectors
+        "#acceptCookieButton",
+        "#onetrust-accept-btn-handler",
+        "#CybotCookiebotDialogBodyLevelButtonLevelOptinAllowAll",
+        ".cookie-consent-accept",
+        "[data-testid='cookie-accept']",
+        "[data-cookiebanner='accept_button']",
+        ".cc-accept",
+        ".cc-btn.cc-dismiss",
+        ".consent-accept",
+        ".js-consent-accept",
+        # Travel site specific
+        ".dCnC-mod-close",  # Kayak
+        "#didomi-notice-agree-button",  # Skyscanner/Didomi
+        ".RxNS-button-content:has-text('OK')",  # Kayak variant
+    ]
+
+    for selector in consent_selectors:
+        try:
+            btn = page.locator(selector).first
+            if await btn.is_visible(timeout=500):
+                await btn.click()
+                logger.info(f"Dismissed cookie consent via: {selector}")
+                await asyncio.sleep(random.uniform(0.5, 1.5))
+                return True
+        except Exception:
+            continue
+
+    # Check for Google's consent.google.com iframe
+    try:
+        frames = page.frames
+        for frame in frames:
+            if "consent.google" in (frame.url or ""):
+                for selector in [
+                    "button:has-text('Accept all')",
+                    "button:has-text('Accept All')",
+                    "button:has-text('Reject all')",
+                    "button:has-text('Accept')",
+                    "button:has-text('Agree')",
+                ]:
+                    try:
+                        btn = frame.locator(selector).first
+                        if await btn.is_visible(timeout=500):
+                            await btn.click()
+                            logger.info(f"Dismissed Google consent iframe via: {selector}")
+                            await asyncio.sleep(random.uniform(0.5, 1.5))
+                            return True
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    # Check if page redirected to consent.google.com
+    if "consent.google" in page.url:
+        logger.info("Detected consent.google.com redirect, looking for buttons...")
+        for selector in [
+            "button:has-text('Accept all')",
+            "button:has-text('Accept All')",
+            "button:has-text('Reject all')",
+            "button:has-text('Accept')",
+            "form button",
+        ]:
+            try:
+                btn = page.locator(selector).first
+                if await btn.is_visible(timeout=2000):
+                    await btn.click()
+                    logger.info(f"Dismissed consent.google.com via: {selector}")
+                    await asyncio.sleep(random.uniform(1.0, 2.0))
+                    # Wait for redirect back to the original site
+                    try:
+                        await page.wait_for_url("**/*google.com/travel/**", timeout=10000)
+                    except Exception:
+                        pass
+                    return True
+            except Exception:
+                continue
+
+    return False
+
+
 async def wait_for_content(page, selector: str, timeout: int = 30000) -> bool:
     """Wait for a selector to appear, handling potential challenges."""
     try:

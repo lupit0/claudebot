@@ -23,6 +23,7 @@ from airline_scraper.models import (
 from airline_scraper.scrapers.base import BaseScraper
 from airline_scraper.utils.browser import (
     create_browser,
+    dismiss_cookie_consent,
     human_delay,
     human_scroll,
     wait_for_content,
@@ -86,16 +87,8 @@ class SkyscannerScraper(BaseScraper):
                 await human_delay(4, 7)
 
                 # Dismiss cookie consent if present
-                try:
-                    consent = page.locator(
-                        "button:has-text('OK'), button:has-text('Accept'), "
-                        "#acceptCookieButton"
-                    )
-                    if await consent.count() > 0:
-                        await consent.first.click()
-                        await human_delay(1, 2)
-                except Exception:
-                    pass
+                await dismiss_cookie_consent(page)
+                await human_delay(1, 2)
 
                 await human_scroll(page)
                 await human_delay(3, 5)
