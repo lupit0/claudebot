@@ -26,6 +26,7 @@ from airline_scraper.models import (
     TripType,
 )
 from airline_scraper.scrapers.base import BaseScraper
+from airline_scraper.utils.links import kayak_link
 from airline_scraper.utils.browser import (
     create_browser,
     dismiss_cookie_consent,
@@ -144,7 +145,7 @@ class KayakScraper(BaseScraper):
                         card_text = await card.inner_text()
                         result = self._parse_kayak_result(card_text, request)
                         if result:
-                            result.deep_link = page.url
+                            result.deep_link = kayak_link(request)
                             results.append(result)
                     except Exception as e:
                         logger.debug(f"Error parsing Kayak result card: {e}")

@@ -21,6 +21,7 @@ from airline_scraper.models import (
     TripType,
 )
 from airline_scraper.scrapers.base import BaseScraper
+from airline_scraper.utils.links import skyscanner_link
 from airline_scraper.utils.browser import (
     create_browser,
     dismiss_cookie_consent,
@@ -176,6 +177,7 @@ class SkyscannerScraper(BaseScraper):
                     arrival_airport=request.destination,
                 ),
                 source=Source.SKYSCANNER,
+                deep_link=skyscanner_link(request),
             )
             results.append(result)
 
@@ -218,7 +220,7 @@ class SkyscannerScraper(BaseScraper):
                             arrival_airport=request.destination,
                         ),
                         source=Source.SKYSCANNER,
-                        deep_link=page.url,
+                        deep_link=skyscanner_link(request),
                     )
                     results.append(result)
                 except Exception:

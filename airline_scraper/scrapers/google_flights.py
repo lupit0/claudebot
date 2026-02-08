@@ -24,6 +24,7 @@ from airline_scraper.models import (
     TripType,
 )
 from airline_scraper.scrapers.base import BaseScraper
+from airline_scraper.utils.links import google_flights_link
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +188,7 @@ class GoogleFlightsScraper(BaseScraper):
                     currency=request.currency,
                     outbound=outbound,
                     source=Source.GOOGLE_FLIGHTS,
+                    deep_link=google_flights_link(request),
                 )
                 results.append(result)
 

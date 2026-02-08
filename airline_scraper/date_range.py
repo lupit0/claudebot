@@ -365,6 +365,7 @@ def _result_to_row(r: DatePairResult, request: SearchRequest) -> dict:
         "duration_minutes": "",
         "duration": "",
         "source": "",
+        "booking_link": "",
         "results_count": len(r.flights),
         "error": r.error or "",
     }
@@ -372,6 +373,7 @@ def _result_to_row(r: DatePairResult, request: SearchRequest) -> dict:
         f = r.cheapest
         row["cheapest_price"] = f.price
         row["source"] = f.source.value
+        row["booking_link"] = f.deep_link
         if f.outbound:
             row["airline"] = f.outbound.airline
             row["stops"] = f.outbound.stops
@@ -399,6 +401,7 @@ def _all_flights_rows(results: list[DatePairResult], request: SearchRequest) -> 
                 "stops": f.outbound.stops if f.outbound else "",
                 "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
                 "source": f.source.value,
+                "booking_link": f.deep_link,
             }
             if f.outbound and f.outbound.duration_minutes:
                 h, m = divmod(f.outbound.duration_minutes, 60)

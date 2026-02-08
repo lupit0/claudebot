@@ -125,6 +125,19 @@ def format_results_table(results: list[FlightResult]) -> str:
             return "\n".join(lines)
 
 
+def format_booking_links(results: list[FlightResult]) -> str:
+    """Format booking links as a numbered list below the results table."""
+    links = []
+    seen = set()
+    for i, flight in enumerate(results, 1):
+        if flight.deep_link and flight.deep_link not in seen:
+            links.append(f"  [{i}] {flight.deep_link}")
+            seen.add(flight.deep_link)
+    if not links:
+        return ""
+    return "\nBooking links (click to verify & book):\n" + "\n".join(links)
+
+
 def format_summary(results: list[FlightResult], request: SearchRequest) -> str:
     """Format a summary of the search results."""
     if not results:
@@ -203,6 +216,7 @@ async def run_search(args: argparse.Namespace) -> int:
 
     # Display results
     print(format_results_table(merged))
+    print(format_booking_links(merged))
     print(format_summary(merged, request))
 
     # Export to file if --output is specified
@@ -234,6 +248,7 @@ def _export_single_search(
             "stops": f.outbound.stops if f.outbound else "",
             "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
             "source": f.source.value,
+            "booking_link": f.deep_link,
         }
         if f.outbound and f.outbound.duration_minutes:
             h, m = divmod(f.outbound.duration_minutes, 60)
@@ -368,6 +383,8 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
         best_pair = next(r for r in results if r.cheapest and r.cheapest.price == overall_cheapest.price)
         print(f"\nBest deal: {overall_cheapest.price_display} on {best_pair.date_pair.label}")
         print(f"  {overall_cheapest.outbound_summary} [{overall_cheapest.source.value}]")
+        if overall_cheapest.deep_link:
+            print(f"  Book/verify: {overall_cheapest.deep_link}")
     else:
         print("\nNo results found for any date combination.")
 
