@@ -11,6 +11,7 @@ from typing import Optional
 
 from airline_scraper.models import CabinClass, FlightResult, SearchRequest, TripType
 from airline_scraper.orchestrator import SCRAPER_REGISTRY, merge_and_rank, search_all
+from airline_scraper.utils.airports import format_airport_display, get_airport_name, resolve_airport
 
 
 def setup_logging(verbose: bool = False):
@@ -36,6 +37,21 @@ def parse_date(date_str: str) -> date:
         )
 
 
+def _format_time(dt: Optional[datetime]) -> str:
+    """Format a datetime as HH:MM or empty string."""
+    if dt:
+        return dt.strftime("%H:%M")
+    return ""
+
+
+def _format_airport(code: str) -> str:
+    """Format airport code with city name, e.g. 'LHR (London Heathrow)'."""
+    name = get_airport_name(code)
+    if name != code:
+        return f"{code} ({name})"
+    return code
+
+
 def format_results_table(results: list[FlightResult]) -> str:
     """Format flight results as a readable table."""
     try:
@@ -45,22 +61,33 @@ def format_results_table(results: list[FlightResult]) -> str:
         table = Table(title="Flight Search Results", show_lines=True)
         table.add_column("#", style="dim", width=3)
         table.add_column("Price", style="bold green", width=10)
-        table.add_column("Airline", width=20)
-        table.add_column("Route", width=15)
+        table.add_column("Airline", width=18)
+        table.add_column("From", width=22)
+        table.add_column("To", width=22)
+        table.add_column("Depart", width=7)
+        table.add_column("Arrive", width=7)
         table.add_column("Stops", width=10)
-        table.add_column("Duration", width=10)
-        table.add_column("Source", style="cyan", width=15)
+        table.add_column("Duration", width=9)
+        table.add_column("Return Dep", width=10)
+        table.add_column("Source", style="cyan", width=14)
 
         for i, flight in enumerate(results, 1):
             stops_str = ""
             duration_str = ""
             airline_str = ""
-            route_str = ""
+            from_str = ""
+            to_str = ""
+            dep_time = ""
+            arr_time = ""
+            ret_dep_time = ""
 
             if flight.outbound:
                 leg = flight.outbound
                 airline_str = leg.airline or "—"
-                route_str = f"{leg.departure_airport}→{leg.arrival_airport}"
+                from_str = _format_airport(leg.departure_airport)
+                to_str = _format_airport(leg.arrival_airport)
+                dep_time = _format_time(leg.departure_time)
+                arr_time = _format_time(leg.arrival_time)
                 stops_str = (
                     "Nonstop"
                     if leg.stops == 0
@@ -70,13 +97,20 @@ def format_results_table(results: list[FlightResult]) -> str:
                     h, m = divmod(leg.duration_minutes, 60)
                     duration_str = f"{h}h {m:02d}m"
 
+            if flight.return_leg:
+                ret_dep_time = _format_time(flight.return_leg.departure_time)
+
             table.add_row(
                 str(i),
                 flight.price_display,
                 airline_str,
-                route_str,
+                from_str,
+                to_str,
+                dep_time,
+                arr_time,
                 stops_str,
                 duration_str,
+                ret_dep_time,
                 flight.source.value,
             )
 
@@ -93,13 +127,18 @@ def format_results_table(results: list[FlightResult]) -> str:
             rows = []
             for i, flight in enumerate(results, 1):
                 airline = ""
-                route = ""
+                from_ap = ""
+                to_ap = ""
+                dep_time = ""
                 stops = ""
                 duration = ""
+                ret_dep = ""
                 if flight.outbound:
                     leg = flight.outbound
                     airline = leg.airline or "—"
-                    route = f"{leg.departure_airport}→{leg.arrival_airport}"
+                    from_ap = _format_airport(leg.departure_airport)
+                    to_ap = _format_airport(leg.arrival_airport)
+                    dep_time = _format_time(leg.departure_time)
                     stops = (
                         "Nonstop"
                         if leg.stops == 0
@@ -108,18 +147,22 @@ def format_results_table(results: list[FlightResult]) -> str:
                     if leg.duration_minutes:
                         h, m = divmod(leg.duration_minutes, 60)
                         duration = f"{h}h {m:02d}m"
+                if flight.return_leg:
+                    ret_dep = _format_time(flight.return_leg.departure_time)
                 rows.append(
-                    [i, flight.price_display, airline, route, stops, duration, flight.source.value]
+                    [i, flight.price_display, airline, from_ap, to_ap,
+                     dep_time, stops, duration, ret_dep, flight.source.value]
                 )
 
             return tabulate(
                 rows,
-                headers=["#", "Price", "Airline", "Route", "Stops", "Duration", "Source"],
+                headers=["#", "Price", "Airline", "From", "To",
+                         "Depart", "Stops", "Duration", "Ret Dep", "Source"],
                 tablefmt="grid",
             )
         except ImportError:
             # Ultra-fallback: plain text
-            lines = ["Flight Search Results", "=" * 60]
+            lines = ["Flight Search Results", "=" * 80]
             for i, flight in enumerate(results, 1):
                 lines.append(f"{i}. {flight.price_display} - {flight.outbound_summary} [{flight.source.value}]")
             return "\n".join(lines)
@@ -188,7 +231,9 @@ async def run_search(args: argparse.Namespace) -> int:
     if args.source:
         sources = [s.strip() for s in args.source.split(",")]
 
-    print(f"\nSearching for flights: {request.origin} → {request.destination}")
+    origin_display = format_airport_display(request.origin)
+    dest_display = format_airport_display(request.destination)
+    print(f"\nSearching for flights: {origin_display} → {dest_display}")
     print(f"Departure: {request.departure_date}", end="")
     if request.return_date:
         print(f"  Return: {request.return_date}")
@@ -239,12 +284,17 @@ def _export_single_search(
     for f in flights:
         row = {
             "origin": request.origin,
+            "origin_airport": get_airport_name(request.origin),
             "destination": request.destination,
+            "destination_airport": get_airport_name(request.destination),
             "departure_date": request.departure_date.isoformat(),
             "return_date": request.return_date.isoformat() if request.return_date else "",
             "currency": f.currency,
             "price": f.price,
             "airline": f.outbound.airline if f.outbound else "",
+            "outbound_departure": _format_time(f.outbound.departure_time) if f.outbound else "",
+            "outbound_arrival": _format_time(f.outbound.arrival_time) if f.outbound else "",
+            "return_departure": _format_time(f.return_leg.departure_time) if f.return_leg else "",
             "stops": f.outbound.stops if f.outbound else "",
             "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
             "source": f.source.value,
@@ -335,7 +385,9 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
     if args.source:
         sources = [s.strip() for s in args.source.split(",")]
 
-    print(f"\nDate Range Search: {base_request.origin} → {base_request.destination}")
+    origin_display = format_airport_display(base_request.origin)
+    dest_display = format_airport_display(base_request.destination)
+    print(f"\nDate Range Search: {origin_display} → {dest_display}")
     print(f"Departure dates: {dep_from} to {dep_to}")
     if ret_from:
         print(f"Return dates:    {ret_from} to {ret_to}")
@@ -411,11 +463,17 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Single date round trip
+  # Single date round trip (airport codes)
   python -m airline_scraper JFK LAX --date 2025-03-15 --return 2025-03-22
 
+  # Use city names instead of airport codes
+  python -m airline_scraper London Barcelona --date 2025-06-01 --return 2025-06-08
+
+  # City names with spaces (use quotes)
+  python -m airline_scraper "New York" Paris --date 2025-06-01 --return 2025-06-08
+
   # Date range search — find cheapest across all date combinations
-  python -m airline_scraper LHR BCN --date 2025-06-01 --date-to 2025-06-07 \\
+  python -m airline_scraper London BCN --date 2025-06-01 --date-to 2025-06-07 \\
       --return 2025-06-08 --return-to 2025-06-14
 
   # Date range with constraints (5-9 night trips only)
@@ -450,8 +508,14 @@ Examples:
         """,
     )
 
-    parser.add_argument("origin", help="Origin airport IATA code (e.g., JFK)")
-    parser.add_argument("destination", help="Destination airport IATA code (e.g., LAX)")
+    parser.add_argument(
+        "origin",
+        help="Origin airport code or city name (e.g., LHR, London, 'New York')",
+    )
+    parser.add_argument(
+        "destination",
+        help="Destination airport code or city name (e.g., BCN, Barcelona, Paris)",
+    )
     parser.add_argument(
         "--date", "-d", type=parse_date, required=True,
         help="Departure date (YYYY-MM-DD). Start of range if --date-to is set.",
@@ -566,6 +630,23 @@ def main():
 
     if args.return_to and args.return_date and args.return_to < args.return_date:
         parser.error("--return-to must be on or after --return.")
+
+    # Resolve city names to airport codes
+    try:
+        origin_code, origin_warning = resolve_airport(args.origin)
+        args.origin = origin_code
+        if origin_warning:
+            print(f"  Origin: {origin_warning}")
+    except ValueError as e:
+        parser.error(str(e))
+
+    try:
+        dest_code, dest_warning = resolve_airport(args.destination)
+        args.destination = dest_code
+        if dest_warning:
+            print(f"  Destination: {dest_warning}")
+    except ValueError as e:
+        parser.error(str(e))
 
     # --direct / --nonstop is shorthand for --max-stops 0
     if args.direct:

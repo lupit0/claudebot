@@ -19,6 +19,7 @@ from typing import Optional
 
 from airline_scraper.models import FlightResult, SearchRequest, TripType
 from airline_scraper.orchestrator import merge_and_rank, search_all
+from airline_scraper.utils.airports import get_airport_name
 
 logger = logging.getLogger(__name__)
 
@@ -350,17 +351,29 @@ def format_heatmap(
         return "\n".join(lines)
 
 
+def _fmt_time(dt) -> str:
+    """Format a datetime as HH:MM or empty string."""
+    if dt:
+        return dt.strftime("%H:%M")
+    return ""
+
+
 def _result_to_row(r: DatePairResult, request: SearchRequest) -> dict:
     """Convert a DatePairResult to a flat dict for export."""
     row = {
         "origin": request.origin,
+        "origin_airport": get_airport_name(request.origin),
         "destination": request.destination,
+        "destination_airport": get_airport_name(request.destination),
         "departure_date": r.date_pair.departure.isoformat(),
         "return_date": r.date_pair.return_date.isoformat() if r.date_pair.return_date else "",
         "nights": (r.date_pair.return_date - r.date_pair.departure).days if r.date_pair.return_date else "",
         "currency": request.currency,
         "cheapest_price": "",
         "airline": "",
+        "outbound_departure": "",
+        "outbound_arrival": "",
+        "return_departure": "",
         "stops": "",
         "duration_minutes": "",
         "duration": "",
@@ -376,11 +389,15 @@ def _result_to_row(r: DatePairResult, request: SearchRequest) -> dict:
         row["booking_link"] = f.deep_link
         if f.outbound:
             row["airline"] = f.outbound.airline
+            row["outbound_departure"] = _fmt_time(f.outbound.departure_time)
+            row["outbound_arrival"] = _fmt_time(f.outbound.arrival_time)
             row["stops"] = f.outbound.stops
             row["duration_minutes"] = f.outbound.duration_minutes or ""
             if f.outbound.duration_minutes:
                 h, m = divmod(f.outbound.duration_minutes, 60)
                 row["duration"] = f"{h}h {m:02d}m"
+        if f.return_leg:
+            row["return_departure"] = _fmt_time(f.return_leg.departure_time)
     return row
 
 
@@ -391,13 +408,18 @@ def _all_flights_rows(results: list[DatePairResult], request: SearchRequest) -> 
         for f in r.flights:
             row = {
                 "origin": request.origin,
+                "origin_airport": get_airport_name(request.origin),
                 "destination": request.destination,
+                "destination_airport": get_airport_name(request.destination),
                 "departure_date": r.date_pair.departure.isoformat(),
                 "return_date": r.date_pair.return_date.isoformat() if r.date_pair.return_date else "",
                 "nights": (r.date_pair.return_date - r.date_pair.departure).days if r.date_pair.return_date else "",
                 "currency": f.currency,
                 "price": f.price,
                 "airline": f.outbound.airline if f.outbound else "",
+                "outbound_departure": _fmt_time(f.outbound.departure_time) if f.outbound else "",
+                "outbound_arrival": _fmt_time(f.outbound.arrival_time) if f.outbound else "",
+                "return_departure": _fmt_time(f.return_leg.departure_time) if f.return_leg else "",
                 "stops": f.outbound.stops if f.outbound else "",
                 "duration_minutes": (f.outbound.duration_minutes or "") if f.outbound else "",
                 "source": f.source.value,
