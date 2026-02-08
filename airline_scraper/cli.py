@@ -438,12 +438,15 @@ Examples:
       --return 2025-06-08 --return-to 2025-06-14 \\
       --output results.json --all-flights
 
+  # Direct flights only
+  python -m airline_scraper LHR BCN --date 2025-06-01 --return 2025-06-08 --direct
+
   # One-way, business class
   python -m airline_scraper SFO LHR --date 2025-04-01 --one-way --cabin business
 
   # Specific source, nonstop only, in EUR
   python -m airline_scraper ORD NRT --date 2025-05-10 --return 2025-05-20 \\
-      --source google_flights --max-stops 0 --currency EUR
+      --source google_flights --direct --currency EUR
         """,
     )
 
@@ -497,6 +500,10 @@ Examples:
     parser.add_argument(
         "--max-stops", type=int, default=None,
         help="Maximum number of stops (0=nonstop, 1, 2). Default: any.",
+    )
+    parser.add_argument(
+        "--direct", "--nonstop", action="store_true",
+        help="Direct/nonstop flights only. Shorthand for --max-stops 0.",
     )
     parser.add_argument(
         "--source", "-s",
@@ -559,6 +566,10 @@ def main():
 
     if args.return_to and args.return_date and args.return_to < args.return_date:
         parser.error("--return-to must be on or after --return.")
+
+    # --direct / --nonstop is shorthand for --max-stops 0
+    if args.direct:
+        args.max_stops = 0
 
     setup_logging(args.verbose)
 
