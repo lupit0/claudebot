@@ -184,7 +184,7 @@ class GoogleFlightsScraper(BaseScraper):
 
                 result = FlightResult(
                     price=price_val,
-                    currency="USD",
+                    currency=request.currency,
                     outbound=outbound,
                     source=Source.GOOGLE_FLIGHTS,
                 )
@@ -221,7 +221,7 @@ class GoogleFlightsScraper(BaseScraper):
             ret_date = request.return_date.strftime("%Y-%m-%d")
             url += f"+return+{ret_date}"
 
-        url += "&curr=USD"
+        url += f"&curr={request.currency}"
 
         results = []
 
@@ -286,7 +286,7 @@ class GoogleFlightsScraper(BaseScraper):
                             if price_val > 10:  # Filter out noise
                                 result = FlightResult(
                                     price=price_val,
-                                    currency="USD",
+                                    currency=request.currency,
                                     outbound=FlightLeg(
                                         departure_airport=request.origin,
                                         arrival_airport=request.destination,

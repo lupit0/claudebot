@@ -141,6 +141,7 @@ def format_summary(results: list[FlightResult], request: SearchRequest) -> str:
         lines.append(f"Return: {request.return_date}")
     lines.extend([
         f"Cabin: {request.cabin_class.value}",
+        f"Currency: {request.currency}",
         f"Passengers: {request.adults} adult(s)" + (f", {request.children} child(ren)" if request.children else ""),
         "",
         f"Results found: {len(results)}",
@@ -165,6 +166,7 @@ async def run_search(args: argparse.Namespace) -> int:
         cabin_class=cabin_class,
         adults=args.adults,
         children=args.children,
+        currency=args.currency.upper(),
         max_stops=args.max_stops,
     )
 
@@ -179,6 +181,7 @@ async def run_search(args: argparse.Namespace) -> int:
         print(f"  Return: {request.return_date}")
     else:
         print(" (one-way)")
+    print(f"Currency: {request.currency}")
     print(f"Sources: {', '.join(sources) if sources else 'all'}")
     print()
 
@@ -255,6 +258,10 @@ Examples:
     parser.add_argument(
         "--children", type=int, default=0,
         help="Number of child passengers (default: 0).",
+    )
+    parser.add_argument(
+        "--currency", default="GBP",
+        help="Currency for prices, ISO 4217 code (default: GBP). Examples: GBP, USD, EUR.",
     )
     parser.add_argument(
         "--max-stops", type=int, default=None,

@@ -80,6 +80,9 @@ class KayakScraper(BaseScraper):
                 f"?sort=price_a&fs=cabin={cabin}"
             )
 
+        # Kayak uses a currency query parameter
+        url += f"&currency={request.currency}"
+
         if request.max_stops is not None:
             url += f";stops={request.max_stops}"
 
@@ -157,8 +160,11 @@ class KayakScraper(BaseScraper):
         self, card_text: str, request: SearchRequest
     ) -> Optional[FlightResult]:
         """Parse a Kayak result card's text content into a FlightResult."""
-        # Extract price (e.g., "$234", "$ 1,234")
-        price_match = re.search(r"\$\s*([\d,]+)", card_text)
+        # Extract price — match any currency symbol (£, $, €) or plain number
+        price_match = re.search(r"[£$€]\s*([\d,]+)", card_text)
+        if not price_match:
+            # Fallback: look for a standalone number that looks like a price
+            price_match = re.search(r"([\d,]{2,})", card_text)
         if not price_match:
             return None
 
@@ -225,7 +231,7 @@ class KayakScraper(BaseScraper):
 
         return FlightResult(
             price=price,
-            currency="USD",
+            currency=request.currency,
             outbound=outbound,
             source=Source.KAYAK,
         )

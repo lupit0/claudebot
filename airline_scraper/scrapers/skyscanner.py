@@ -52,22 +52,22 @@ class SkyscannerScraper(BaseScraper):
         dep_date = request.departure_date.strftime("%y%m%d")
         cabin = _CABIN_MAP.get(request.cabin_class, "economy")
 
+        currency_lower = request.currency.lower()
+
         if request.trip_type == TripType.ROUND_TRIP and request.return_date:
             ret_date = request.return_date.strftime("%y%m%d")
-            url = (
+            base_url = (
                 f"https://www.skyscanner.com/transport/flights/"
                 f"{request.origin.lower()}/{request.destination.lower()}/"
                 f"{dep_date}/{ret_date}/"
                 f"?adultsv2={request.adults}"
                 f"&cabinclass={cabin}"
-                f"&childrenv2=" + "%7C".join(["8"] * request.children)
-                if request.children
-                else f"https://www.skyscanner.com/transport/flights/"
-                f"{request.origin.lower()}/{request.destination.lower()}/"
-                f"{dep_date}/{ret_date}/"
-                f"?adultsv2={request.adults}"
-                f"&cabinclass={cabin}"
+                f"&currency={currency_lower}"
             )
+            if request.children:
+                url = base_url + "&childrenv2=" + "%7C".join(["8"] * request.children)
+            else:
+                url = base_url
         else:
             url = (
                 f"https://www.skyscanner.com/transport/flights/"
@@ -75,6 +75,7 @@ class SkyscannerScraper(BaseScraper):
                 f"{dep_date}/"
                 f"?adultsv2={request.adults}"
                 f"&cabinclass={cabin}"
+                f"&currency={currency_lower}"
                 f"&rtn=0"
             )
 
@@ -145,14 +146,18 @@ class SkyscannerScraper(BaseScraper):
         results = []
 
         # Look for price elements in various Skyscanner layouts
+        # Match common currency symbols and also plain numbers
         price_elements = soup.find_all(
-            string=re.compile(r"[\$€£]\s*\d+")
+            string=re.compile(r"[\$€£¥₹]\s*\d+|[A-Z]{3}\s*\d+")
         )
 
         seen_prices = set()
         for el in price_elements[:30]:
             text = str(el).strip()
-            price_match = re.search(r"[\$€£]\s*([\d,]+)", text)
+            price_match = re.search(r"[\$€£¥₹]\s*([\d,]+)", text)
+            if not price_match:
+                # Try matching "GBP 123" / "USD 456" style
+                price_match = re.search(r"[A-Z]{3}\s*([\d,]+)", text)
             if not price_match:
                 continue
 
@@ -161,16 +166,11 @@ class SkyscannerScraper(BaseScraper):
                 continue
             seen_prices.add(price)
 
-            # Determine currency
-            currency = "USD"
-            if "€" in text:
-                currency = "EUR"
-            elif "£" in text:
-                currency = "GBP"
-
+            # Use the requested currency — Skyscanner returns prices in the
+            # currency we asked for via the URL parameter
             result = FlightResult(
                 price=price,
-                currency=currency,
+                currency=request.currency,
                 outbound=FlightLeg(
                     departure_airport=request.origin,
                     arrival_airport=request.destination,
@@ -212,7 +212,7 @@ class SkyscannerScraper(BaseScraper):
 
                     result = FlightResult(
                         price=price,
-                        currency="USD",
+                        currency=request.currency,
                         outbound=FlightLeg(
                             departure_airport=request.origin,
                             arrival_airport=request.destination,

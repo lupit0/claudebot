@@ -38,6 +38,7 @@ class SearchRequest:
     cabin_class: CabinClass = CabinClass.ECONOMY
     adults: int = 1
     children: int = 0
+    currency: str = "GBP"  # ISO 4217 currency code
     max_stops: Optional[int] = None  # None = any, 0 = nonstop only
 
     def __post_init__(self):
@@ -71,7 +72,7 @@ class FlightResult:
     """A complete flight search result."""
 
     price: float
-    currency: str = "USD"
+    currency: str = "GBP"
     outbound: Optional[FlightLeg] = None
     return_leg: Optional[FlightLeg] = None
     source: Source = Source.GOOGLE_FLIGHTS
@@ -80,7 +81,10 @@ class FlightResult:
 
     @property
     def price_display(self) -> str:
-        symbol = {"USD": "$", "EUR": "€", "GBP": "£"}.get(self.currency, self.currency + " ")
+        symbol = {
+            "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥",
+            "CAD": "CA$", "AUD": "A$", "CHF": "CHF ", "INR": "₹",
+        }.get(self.currency, self.currency + " ")
         return f"{symbol}{self.price:,.0f}"
 
     @property
