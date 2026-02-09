@@ -127,12 +127,37 @@ def skyscanner_link(request: SearchRequest) -> str:
     return url
 
 
+def ryanair_link(request: SearchRequest) -> str:
+    """Generate a Ryanair booking link.
+
+    Opens Ryanair's trip selection page with pre-filled search parameters.
+    """
+    dep = request.departure_date.strftime("%Y-%m-%d")
+    url = (
+        f"https://www.ryanair.com/gb/en/trip/flights/select"
+        f"?adults={request.adults}"
+        f"&teens=0"
+        f"&children={request.children}"
+        f"&infants=0"
+        f"&dateOut={dep}"
+        f"&isConnectedFlight=false"
+        f"&isReturn={'true' if request.return_date else 'false'}"
+        f"&discount=0"
+        f"&originIata={request.origin}"
+        f"&destinationIata={request.destination}"
+    )
+    if request.return_date:
+        ret = request.return_date.strftime("%Y-%m-%d")
+        url += f"&dateIn={ret}"
+    return url
+
+
 def generate_booking_link(request: SearchRequest, source: str) -> str:
     """Generate a booking link for a given source.
 
     Args:
         request: The search parameters.
-        source: One of 'google_flights', 'kayak', 'skyscanner'.
+        source: One of 'google_flights', 'kayak', 'skyscanner', 'ryanair'.
 
     Returns:
         A URL string that opens the site with a pre-filled search.
@@ -141,6 +166,7 @@ def generate_booking_link(request: SearchRequest, source: str) -> str:
         "google_flights": google_flights_link,
         "kayak": kayak_link,
         "skyscanner": skyscanner_link,
+        "ryanair": ryanair_link,
     }
     gen = generators.get(source)
     if gen:

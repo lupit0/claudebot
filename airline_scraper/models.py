@@ -24,6 +24,7 @@ class Source(Enum):
     GOOGLE_FLIGHTS = "google_flights"
     KAYAK = "kayak"
     SKYSCANNER = "skyscanner"
+    RYANAIR = "ryanair"
 
 
 @dataclass

@@ -11,6 +11,7 @@ from airline_scraper.models import FlightResult, SearchRequest, Source
 from airline_scraper.scrapers.base import BaseScraper
 from airline_scraper.scrapers.google_flights import GoogleFlightsScraper
 from airline_scraper.scrapers.kayak import KayakScraper
+from airline_scraper.scrapers.ryanair import RyanairScraper
 from airline_scraper.scrapers.skyscanner import SkyscannerScraper
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ SCRAPER_REGISTRY: dict[str, type[BaseScraper]] = {
     "google_flights": GoogleFlightsScraper,
     "kayak": KayakScraper,
     "skyscanner": SkyscannerScraper,
+    "ryanair": RyanairScraper,
 }
 
 # Track sources that are CAPTCHA-blocked so we can skip them on subsequent
