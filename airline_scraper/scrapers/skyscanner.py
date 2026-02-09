@@ -29,6 +29,7 @@ from airline_scraper.utils.browser import (
     dismiss_cookie_consent,
     human_delay,
     human_scroll,
+    try_bypass_cloudflare,
     wait_for_content,
 )
 
@@ -116,16 +117,33 @@ class SkyscannerScraper(BaseScraper):
                     # Check if we're blocked by CAPTCHA
                     challenge = await detect_challenge(page)
                     if challenge:
-                        logger.warning(
-                            f"Skyscanner CAPTCHA-blocked for {request.origin}→{request.destination}: {challenge}"
-                        )
-                        try:
-                            from airline_scraper.orchestrator import mark_source_blocked
-                            mark_source_blocked("skyscanner")
-                        except ImportError:
-                            pass
-                    else:
-                        logger.warning("Could not load Skyscanner results")
+                        # Try pydoll's native Cloudflare bypass
+                        if "cloudflare" in challenge.lower() or "turnstile" in challenge.lower():
+                            bypassed = await try_bypass_cloudflare(page)
+                            if bypassed:
+                                challenge = await detect_challenge(page)
+                                if not challenge:
+                                    logger.info("Cloudflare bypass succeeded on Skyscanner, retrying load...")
+                                    loaded = await wait_for_content(
+                                        page,
+                                        "[class*='FlightsResults'], [class*='ItineraryList'], "
+                                        "[class*='resultItem']",
+                                        timeout=15000,
+                                        max_retries=0,
+                                    )
+                    if not loaded:
+                        challenge = await detect_challenge(page)
+                        if challenge:
+                            logger.warning(
+                                f"Skyscanner CAPTCHA-blocked for {request.origin}→{request.destination}: {challenge}"
+                            )
+                            try:
+                                from airline_scraper.orchestrator import mark_source_blocked
+                                mark_source_blocked("skyscanner")
+                            except ImportError:
+                                pass
+                        else:
+                            logger.warning("Could not load Skyscanner results")
                     try:
                         os.makedirs("screenshots", exist_ok=True)
                         await page.screenshot(

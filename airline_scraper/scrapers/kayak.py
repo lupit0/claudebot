@@ -34,6 +34,7 @@ from airline_scraper.utils.browser import (
     dismiss_cookie_consent,
     human_delay,
     human_scroll,
+    try_bypass_cloudflare,
     wait_for_content,
 )
 
@@ -127,16 +128,33 @@ class KayakScraper(BaseScraper):
                     # Check if we're blocked by CAPTCHA
                     challenge = await detect_challenge(page)
                     if challenge:
-                        logger.warning(
-                            f"Kayak CAPTCHA-blocked for {request.origin}→{request.destination}: {challenge}"
-                        )
-                        try:
-                            from airline_scraper.orchestrator import mark_source_blocked
-                            mark_source_blocked("kayak")
-                        except ImportError:
-                            pass
-                    else:
-                        logger.warning("Could not load Kayak results")
+                        # Try pydoll's native Cloudflare bypass (Kayak uses DataDome,
+                        # not Cloudflare, but try anyway in case detection was generic)
+                        if "cloudflare" in challenge.lower() or "turnstile" in challenge.lower():
+                            bypassed = await try_bypass_cloudflare(page)
+                            if bypassed:
+                                challenge = await detect_challenge(page)
+                                if not challenge:
+                                    logger.info("CAPTCHA bypass succeeded on Kayak, retrying load...")
+                                    loaded = await wait_for_content(
+                                        page,
+                                        "[class*='resultInner'], [class*='nrc6'], .Flights-Results-FlightResultItem",
+                                        timeout=15000,
+                                        max_retries=0,
+                                    )
+                    if not loaded:
+                        challenge = await detect_challenge(page)
+                        if challenge:
+                            logger.warning(
+                                f"Kayak CAPTCHA-blocked for {request.origin}→{request.destination}: {challenge}"
+                            )
+                            try:
+                                from airline_scraper.orchestrator import mark_source_blocked
+                                mark_source_blocked("kayak")
+                            except ImportError:
+                                pass
+                        else:
+                            logger.warning("Could not load Kayak results")
                     try:
                         os.makedirs("screenshots", exist_ok=True)
                         await page.screenshot(path="screenshots/kayak_debug.png")

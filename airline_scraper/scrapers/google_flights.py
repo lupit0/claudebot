@@ -213,6 +213,7 @@ class GoogleFlightsScraper(BaseScraper):
             dismiss_cookie_consent,
             human_delay,
             human_scroll,
+            try_bypass_cloudflare,
             wait_for_content,
         )
 
@@ -259,9 +260,20 @@ class GoogleFlightsScraper(BaseScraper):
                             f"CAPTCHA detected on Google Flights for {request.origin}→{request.destination}: "
                             f"{challenge}"
                         )
-                        # Wait for possible auto-resolve
-                        await human_delay(8, 12)
-                        challenge = await detect_challenge(page)
+                        # Try pydoll's native Cloudflare bypass first
+                        if "cloudflare" in challenge.lower() or "turnstile" in challenge.lower():
+                            bypassed = await try_bypass_cloudflare(page)
+                            if bypassed:
+                                challenge = await detect_challenge(page)
+                                if not challenge:
+                                    logger.info("Cloudflare bypass succeeded on Google Flights!")
+                                    # Fall through to URL check below
+
+                        if challenge:
+                            # Wait for possible auto-resolve
+                            await human_delay(8, 12)
+                            challenge = await detect_challenge(page)
+
                         if challenge:
                             captcha_blocked = True
                             logger.warning(

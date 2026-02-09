@@ -3,7 +3,10 @@
 # Google Flights - lightweight, no browser needed
 fast-flights>=1.2.0
 
-# Undetected browser automation (Playwright fork)
+# Browser automation — pydoll (primary, CDP-based, native CAPTCHA bypass)
+pydoll-python>=2.17.0
+
+# Undetected browser automation (Playwright fork) — fallback if pydoll unavailable
 patchright>=1.0.0
 
 # Human-like browser behavior
