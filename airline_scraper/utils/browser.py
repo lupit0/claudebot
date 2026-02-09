@@ -204,27 +204,21 @@ async def create_browser(
 
 
 async def _apply_stealth(page) -> None:
-    """Apply additional stealth JavaScript patches beyond what Patchright provides."""
+    """Apply additional stealth JavaScript patches beyond what Patchright provides.
+
+    Uses page.evaluate() instead of add_init_script() to avoid DNS resolution
+    issues that add_init_script causes with Patchright's internal patching.
+
+    Patchright already handles: navigator.webdriver, CDP leaks, HeadlessChrome UA.
+    We only patch what Patchright doesn't cover.
+    """
     try:
-        await page.add_init_script("""
-            // Override navigator.webdriver (belt-and-suspenders with Patchright)
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-
-            // Override navigator.plugins to look like a real browser
-            Object.defineProperty(navigator, 'plugins', {
-                get: () => [1, 2, 3, 4, 5]
-            });
-
-            // Override navigator.languages
-            Object.defineProperty(navigator, 'languages', {
-                get: () => ['en-GB', 'en']
-            });
-
+        await page.evaluate("""() => {
             // Fix chrome.runtime to exist (Chromium automation detection)
             if (!window.chrome) { window.chrome = {}; }
             if (!window.chrome.runtime) { window.chrome.runtime = {}; }
 
-            // Override permissions API
+            // Override permissions API to avoid notification prompt detection
             const originalQuery = window.navigator.permissions?.query;
             if (originalQuery) {
                 window.navigator.permissions.query = (parameters) => (
@@ -233,7 +227,7 @@ async def _apply_stealth(page) -> None:
                         originalQuery(parameters)
                 );
             }
-        """)
+        }""")
     except Exception as e:
         logger.debug(f"Could not apply stealth script: {e}")
 

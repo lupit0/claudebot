@@ -242,6 +242,7 @@ class GoogleFlightsScraper(BaseScraper):
         try:
             async with create_browser(headless=headless) as (page, context):
                 # Navigate to Google Flights with up to 2 consent-redirect retries
+                captcha_blocked = False
                 for nav_attempt in range(3):
                     logger.info(f"Navigating to Google Flights (attempt {nav_attempt + 1}): {url}")
                     await page.goto(url, wait_until="domcontentloaded")
@@ -254,15 +255,23 @@ class GoogleFlightsScraper(BaseScraper):
                     # Check for captcha/challenge
                     challenge = await detect_challenge(page)
                     if challenge:
-                        logger.warning(f"Challenge on Google Flights: {challenge}")
+                        logger.warning(
+                            f"CAPTCHA detected on Google Flights for {request.origin}→{request.destination}: "
+                            f"{challenge}"
+                        )
                         # Wait for possible auto-resolve
                         await human_delay(8, 12)
                         challenge = await detect_challenge(page)
                         if challenge:
-                            logger.warning("Challenge persists, continuing anyway...")
+                            captcha_blocked = True
+                            logger.warning(
+                                f"CAPTCHA persists for {request.origin}. "
+                                "Results for this airport may come from Kayak/Skyscanner instead."
+                            )
 
                     # Check if we're actually on the flights page
                     if "travel/flights" in page.url:
+                        captcha_blocked = False
                         break
                     elif "consent.google" in page.url:
                         logger.info("Stuck on consent.google.com, retrying...")
@@ -274,6 +283,13 @@ class GoogleFlightsScraper(BaseScraper):
                     else:
                         logger.info(f"Unexpected URL: {page.url}, re-navigating...")
                         continue
+
+                if captcha_blocked:
+                    logger.warning(
+                        f"Google Flights blocked by CAPTCHA for {request.origin}→{request.destination}. "
+                        "Skipping browser extraction. Try Kayak/Skyscanner or set PROXY_URL."
+                    )
+                    return []
 
                 await human_scroll(page)
                 await human_delay(2, 4)

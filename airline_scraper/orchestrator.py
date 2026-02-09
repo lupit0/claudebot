@@ -88,12 +88,31 @@ async def search_all(
         completed = []
 
     results: dict[str, list[FlightResult]] = {}
+    failed_sources = []
+    succeeded_sources = []
     for item in completed:
         if isinstance(item, tuple):
             name, flight_list = item
             results[name] = flight_list
+            if flight_list:
+                succeeded_sources.append(name)
+            else:
+                failed_sources.append(name)
         elif isinstance(item, Exception):
             logger.error(f"Scraper error: {item}")
+
+    # Log summary of source results for diagnostics
+    if failed_sources and succeeded_sources:
+        logger.info(
+            f"Partial results for {request.origin}→{request.destination}: "
+            f"succeeded=[{', '.join(succeeded_sources)}], "
+            f"no results=[{', '.join(failed_sources)}]"
+        )
+    elif failed_sources and not succeeded_sources:
+        logger.warning(
+            f"No results from any source for {request.origin}→{request.destination}. "
+            "All sources may be CAPTCHA-blocked. Try setting PROXY_URL to a residential proxy."
+        )
 
     return results
 
