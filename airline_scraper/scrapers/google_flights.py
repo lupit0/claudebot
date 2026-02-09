@@ -289,6 +289,13 @@ class GoogleFlightsScraper(BaseScraper):
                         f"Google Flights blocked by CAPTCHA for {request.origin}→{request.destination}. "
                         "Skipping browser extraction. Try Kayak/Skyscanner or set PROXY_URL."
                     )
+                    # Mark Google Flights as blocked so the orchestrator skips it
+                    # for subsequent searches (e.g., remaining date range combos)
+                    try:
+                        from airline_scraper.orchestrator import mark_source_blocked
+                        mark_source_blocked("google_flights")
+                    except ImportError:
+                        pass
                     return []
 
                 await human_scroll(page)

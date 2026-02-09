@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 from airline_scraper.models import FlightResult, SearchRequest, TripType
-from airline_scraper.orchestrator import merge_and_rank, search_all
+from airline_scraper.orchestrator import clear_blocked_sources, merge_and_rank, search_all
 from airline_scraper.utils.airports import get_airport_name
 
 logger = logging.getLogger(__name__)
@@ -122,6 +122,9 @@ async def search_date_range(
     Returns:
         List of DatePairResult, one per date pair.
     """
+    # Reset any stale CAPTCHA blocks from previous searches
+    clear_blocked_sources()
+
     results = []
     total = len(date_pairs)
 

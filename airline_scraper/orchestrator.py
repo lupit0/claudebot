@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from airline_scraper.models import FlightResult, SearchRequest, Source
@@ -21,6 +22,12 @@ SCRAPER_REGISTRY: dict[str, type[BaseScraper]] = {
     "skyscanner": SkyscannerScraper,
 }
 
+# Track sources that are CAPTCHA-blocked so we can skip them on subsequent
+# searches (e.g., across date range combinations).  Maps source name to the
+# timestamp when the block was recorded so we can expire stale entries.
+_captcha_blocked_sources: dict[str, float] = {}
+_CAPTCHA_BLOCK_TTL = 600  # 10 minutes — stop retrying a blocked source for this long
+
 
 def get_scraper(name: str) -> BaseScraper:
     """Instantiate a scraper by name."""
@@ -32,16 +39,50 @@ def get_scraper(name: str) -> BaseScraper:
     return cls()
 
 
+def mark_source_blocked(source_name: str) -> None:
+    """Mark a source as CAPTCHA-blocked so subsequent searches skip it."""
+    _captcha_blocked_sources[source_name] = time.monotonic()
+    logger.info(
+        f"Marked {source_name} as CAPTCHA-blocked — will skip for {_CAPTCHA_BLOCK_TTL}s"
+    )
+
+
+def is_source_blocked(source_name: str) -> bool:
+    """Check if a source is currently CAPTCHA-blocked."""
+    blocked_at = _captcha_blocked_sources.get(source_name)
+    if blocked_at is None:
+        return False
+    if time.monotonic() - blocked_at > _CAPTCHA_BLOCK_TTL:
+        del _captcha_blocked_sources[source_name]
+        return False
+    return True
+
+
+def clear_blocked_sources() -> None:
+    """Reset the blocked-sources tracker (e.g., between routes)."""
+    _captcha_blocked_sources.clear()
+
+
 async def search_single(
     scraper: BaseScraper,
     request: SearchRequest,
+    per_source_timeout: int = 90,
 ) -> tuple[str, list[FlightResult]]:
-    """Run a single scraper and return its name + results."""
+    """Run a single scraper with its own timeout.
+
+    Returns (scraper_name, results). On timeout or error, returns empty list.
+    """
     try:
         logger.info(f"Searching {scraper.name}...")
-        results = await scraper.search(request)
+        results = await asyncio.wait_for(
+            scraper.search(request),
+            timeout=per_source_timeout,
+        )
         logger.info(f"{scraper.name}: found {len(results)} results")
         return scraper.name, results
+    except asyncio.TimeoutError:
+        logger.warning(f"{scraper.name}: timed out after {per_source_timeout}s")
+        return scraper.name, []
     except Exception as e:
         logger.error(f"{scraper.name} failed: {e}")
         return scraper.name, []
@@ -54,10 +95,16 @@ async def search_all(
 ) -> dict[str, list[FlightResult]]:
     """Search multiple sources concurrently.
 
+    Uses asyncio.wait instead of asyncio.wait_for+gather so that results
+    from completed scrapers are preserved even if another scraper times out.
+
+    Each source also has its own per-source timeout (90s) so a single slow
+    source is cancelled independently without affecting others.
+
     Args:
         request: The flight search parameters.
         sources: List of source names to search. Defaults to all available.
-        timeout_seconds: Max time to wait for all scrapers.
+        timeout_seconds: Max total time to wait for all scrapers.
 
     Returns:
         Dict mapping source name to list of FlightResults.
@@ -65,8 +112,16 @@ async def search_all(
     if sources is None:
         sources = list(SCRAPER_REGISTRY.keys())
 
-    scrapers = []
+    # Filter out CAPTCHA-blocked sources
+    active_sources = []
     for name in sources:
+        if is_source_blocked(name):
+            logger.info(f"Skipping {name} — CAPTCHA-blocked from previous search")
+        else:
+            active_sources.append(name)
+
+    scrapers = []
+    for name in active_sources:
         try:
             scrapers.append(get_scraper(name))
         except ValueError as e:
@@ -76,30 +131,52 @@ async def search_all(
         logger.error("No valid scrapers to run")
         return {}
 
-    # Run all scrapers concurrently with a timeout
-    tasks = [search_single(s, request) for s in scrapers]
-    try:
-        completed = await asyncio.wait_for(
-            asyncio.gather(*tasks, return_exceptions=True),
-            timeout=timeout_seconds,
-        )
-    except asyncio.TimeoutError:
-        logger.warning(f"Search timed out after {timeout_seconds}s")
-        completed = []
+    # Per-source timeout is shorter than total timeout to give room
+    per_source_timeout = min(90, timeout_seconds - 5)
 
+    # Wrap each scraper in its own task with per-source timeout
+    tasks = {
+        asyncio.create_task(
+            search_single(s, request, per_source_timeout),
+            name=s.name,
+        ): s.name
+        for s in scrapers
+    }
+
+    # Wait for all tasks with a total timeout — asyncio.wait returns
+    # (done, pending) so completed results are never discarded
+    done, pending = await asyncio.wait(
+        tasks.keys(),
+        timeout=timeout_seconds,
+    )
+
+    # Cancel any still-running tasks
+    for task in pending:
+        source_name = tasks[task]
+        logger.warning(f"{source_name}: still running after {timeout_seconds}s total timeout, cancelling")
+        task.cancel()
+
+    # Collect results from completed tasks
     results: dict[str, list[FlightResult]] = {}
     failed_sources = []
     succeeded_sources = []
-    for item in completed:
-        if isinstance(item, tuple):
-            name, flight_list = item
+
+    for task in done:
+        try:
+            name, flight_list = task.result()
             results[name] = flight_list
             if flight_list:
                 succeeded_sources.append(name)
             else:
                 failed_sources.append(name)
-        elif isinstance(item, Exception):
-            logger.error(f"Scraper error: {item}")
+        except Exception as e:
+            logger.error(f"Scraper task error: {e}")
+
+    # Add timed-out sources to failed list
+    for task in pending:
+        source_name = tasks[task]
+        failed_sources.append(source_name)
+        results[source_name] = []
 
     # Log summary of source results for diagnostics
     if failed_sources and succeeded_sources:

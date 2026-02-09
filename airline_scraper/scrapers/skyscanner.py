@@ -25,6 +25,7 @@ from airline_scraper.utils.airports import validate_stops
 from airline_scraper.utils.links import skyscanner_link
 from airline_scraper.utils.browser import (
     create_browser,
+    detect_challenge,
     dismiss_cookie_consent,
     human_delay,
     human_scroll,
@@ -112,7 +113,19 @@ class SkyscannerScraper(BaseScraper):
                 )
 
                 if not loaded:
-                    logger.warning("Could not load Skyscanner results")
+                    # Check if we're blocked by CAPTCHA
+                    challenge = await detect_challenge(page)
+                    if challenge:
+                        logger.warning(
+                            f"Skyscanner CAPTCHA-blocked for {request.origin}→{request.destination}: {challenge}"
+                        )
+                        try:
+                            from airline_scraper.orchestrator import mark_source_blocked
+                            mark_source_blocked("skyscanner")
+                        except ImportError:
+                            pass
+                    else:
+                        logger.warning("Could not load Skyscanner results")
                     try:
                         os.makedirs("screenshots", exist_ok=True)
                         await page.screenshot(
