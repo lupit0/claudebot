@@ -209,6 +209,7 @@ class GoogleFlightsScraper(BaseScraper):
         """
         from airline_scraper.utils.browser import (
             create_browser,
+            detect_challenge,
             dismiss_cookie_consent,
             human_delay,
             human_scroll,
@@ -217,11 +218,13 @@ class GoogleFlightsScraper(BaseScraper):
 
         headless = os.getenv("HEADLESS", "true").lower() == "true"
 
-        # Build the Google Flights URL
+        # Build the Google Flights URL.
+        # Use hl=en to force English and reduce consent redirect issues.
         dep_date = request.departure_date.strftime("%Y-%m-%d")
         url = (
             f"https://www.google.com/travel/flights?"
-            f"q=flights+from+{request.origin}+to+{request.destination}"
+            f"hl=en"
+            f"&q=flights+from+{request.origin}+to+{request.destination}"
             f"+on+{dep_date}"
         )
         if request.return_date:
@@ -238,24 +241,42 @@ class GoogleFlightsScraper(BaseScraper):
 
         try:
             async with create_browser(headless=headless) as (page, context):
-                logger.info(f"Navigating to Google Flights: {url}")
-                await page.goto(url, wait_until="domcontentloaded")
-                await human_delay(2, 4)
+                # Navigate to Google Flights with up to 2 consent-redirect retries
+                for nav_attempt in range(3):
+                    logger.info(f"Navigating to Google Flights (attempt {nav_attempt + 1}): {url}")
+                    await page.goto(url, wait_until="domcontentloaded")
+                    await human_delay(2, 4)
 
-                # Dismiss cookie consent (Google shows this in EU regions)
-                await dismiss_cookie_consent(page)
-                await human_delay(1, 2)
+                    # Dismiss cookie consent (Google shows this in EU regions)
+                    await dismiss_cookie_consent(page)
+                    await human_delay(1, 2)
+
+                    # Check for captcha/challenge
+                    challenge = await detect_challenge(page)
+                    if challenge:
+                        logger.warning(f"Challenge on Google Flights: {challenge}")
+                        # Wait for possible auto-resolve
+                        await human_delay(8, 12)
+                        challenge = await detect_challenge(page)
+                        if challenge:
+                            logger.warning("Challenge persists, continuing anyway...")
+
+                    # Check if we're actually on the flights page
+                    if "travel/flights" in page.url:
+                        break
+                    elif "consent.google" in page.url:
+                        logger.info("Stuck on consent.google.com, retrying...")
+                        await dismiss_cookie_consent(page)
+                        await human_delay(2, 3)
+                        if "consent.google" in page.url:
+                            # Force navigate back
+                            continue
+                    else:
+                        logger.info(f"Unexpected URL: {page.url}, re-navigating...")
+                        continue
 
                 await human_scroll(page)
                 await human_delay(2, 4)
-
-                # If consent redirected us, navigate back to the flights page
-                if "travel/flights" not in page.url:
-                    logger.info("Re-navigating to Google Flights after consent...")
-                    await page.goto(url, wait_until="domcontentloaded")
-                    await human_delay(3, 5)
-                    await dismiss_cookie_consent(page)
-                    await human_delay(1, 2)
 
                 # Wait for flight results to load
                 loaded = await wait_for_content(
