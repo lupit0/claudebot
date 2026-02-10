@@ -85,9 +85,12 @@ class GoogleFlightsScraper(BaseScraper):
         return await self._search_browser(request)
 
     async def _search_fast_flights(self, request: SearchRequest) -> list[FlightResult]:
-        """Use the fast-flights library (lightweight, no browser)."""
+        """Use the fast-flights library (lightweight, no browser).
+
+        fast-flights v2.2 uses keyword-only arguments for get_flights().
+        """
         try:
-            from fast_flights import FlightData, Passengers, create_filter
+            from fast_flights import FlightData, Passengers, get_flights
         except ImportError:
             logger.warning(
                 "fast-flights not installed. Install with: pip install fast-flights"
@@ -101,41 +104,38 @@ class GoogleFlightsScraper(BaseScraper):
                 else "round-trip"
             )
 
-            filter_obj = create_filter(
-                flight_data=[
-                    FlightData(
-                        date=request.departure_date.strftime("%Y-%m-%d"),
-                        from_airport=request.origin,
-                        to_airport=request.destination,
-                    ),
-                ]
-                + (
-                    [
-                        FlightData(
-                            date=request.return_date.strftime("%Y-%m-%d"),
-                            from_airport=request.destination,
-                            to_airport=request.origin,
-                        ),
-                    ]
-                    if request.return_date and request.trip_type == TripType.ROUND_TRIP
-                    else []
+            flight_data = [
+                FlightData(
+                    date=request.departure_date.strftime("%Y-%m-%d"),
+                    from_airport=request.origin,
+                    to_airport=request.destination,
                 ),
-                trip=trip_type,
-                seat=_CABIN_MAP.get(request.cabin_class, "economy"),
-                passengers=Passengers(
+            ]
+            if request.return_date and request.trip_type == TripType.ROUND_TRIP:
+                flight_data.append(
+                    FlightData(
+                        date=request.return_date.strftime("%Y-%m-%d"),
+                        from_airport=request.destination,
+                        to_airport=request.origin,
+                    )
+                )
+
+            # Build keyword args for get_flights (v2.2 API — keyword-only)
+            kwargs = {
+                "flight_data": flight_data,
+                "trip": trip_type,
+                "seat": _CABIN_MAP.get(request.cabin_class, "economy"),
+                "passengers": Passengers(
                     adults=request.adults,
                     children=request.children,
                 ),
-            )
+            }
+            if request.max_stops is not None:
+                kwargs["max_stops"] = request.max_stops
 
-            # Apply max stops filter if specified
-            if request.max_stops is not None and request.max_stops in _STOPS_MAP:
-                filter_obj.max_stops = _STOPS_MAP[request.max_stops]
-
-            # Execute the search
-            from fast_flights import get_flights
-
-            flight_results = get_flights(filter_obj)
+            # get_flights is synchronous — run in thread to avoid blocking
+            import asyncio
+            flight_results = await asyncio.to_thread(get_flights, **kwargs)
 
             results = []
             if not flight_results or not flight_results.flights:
@@ -154,7 +154,14 @@ class GoogleFlightsScraper(BaseScraper):
                 if price_val is None:
                     continue
 
-                # Build outbound leg
+                # Build outbound leg — v2.2 Flight has .stops as int directly
+                stops_val = 0
+                if hasattr(flight, "stops"):
+                    if isinstance(flight.stops, int):
+                        stops_val = flight.stops
+                    elif isinstance(flight.stops, str):
+                        stops_val = _count_stops(flight.stops)
+
                 outbound = FlightLeg(
                     departure_airport=request.origin,
                     arrival_airport=request.destination,
@@ -162,7 +169,7 @@ class GoogleFlightsScraper(BaseScraper):
                     duration_minutes=_parse_duration(
                         getattr(flight, "duration", "") or ""
                     ),
-                    stops=_count_stops(getattr(flight, "stops", "") or ""),
+                    stops=stops_val,
                 )
 
                 # Parse departure/arrival times if available

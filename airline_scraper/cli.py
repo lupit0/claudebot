@@ -462,11 +462,21 @@ async def run_date_range_search(args: argparse.Namespace) -> int:
                 airport_tag = f" [{origin}→{dest}]" if total_airport_combos > 1 else ""
                 print(f"  [{idx + 1}/{total}] {pair.label}: {price} ({status}){airport_tag}")
 
+            # Build incremental CSV path so data survives SIGKILL
+            output_path = getattr(args, "output", None)
+            incr_csv = None
+            if output_path and output_path.endswith(".csv"):
+                incr_csv = output_path
+            elif total_searches > 5:
+                # Auto-generate incremental CSV for large batches
+                incr_csv = f"results_{origin}_{dest}_incremental.csv"
+
             results = await search_date_range(
                 base_request=base_request,
                 date_pairs=date_pairs,
                 sources=sources,
                 progress_callback=on_progress,
+                incremental_csv_path=incr_csv,
             )
             all_results.extend(results)
 

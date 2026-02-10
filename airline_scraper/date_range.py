@@ -20,6 +20,7 @@ from typing import Optional
 from airline_scraper.models import FlightResult, SearchRequest, TripType
 from airline_scraper.orchestrator import clear_blocked_sources, merge_and_rank, search_all
 from airline_scraper.utils.airports import get_airport_name
+from airline_scraper.utils.browser import cleanup_zombie_chrome, log_resource_usage
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,7 @@ async def search_date_range(
     fast_flights_delay: tuple[float, float] = (3.0, 8.0),
     max_results_per_pair: int = 5,
     progress_callback=None,
+    incremental_csv_path: Optional[str] = None,
 ) -> list[DatePairResult]:
     """Search all date combinations with rate limiting.
 
@@ -118,6 +120,8 @@ async def search_date_range(
         fast_flights_delay: Min/max seconds for fast-flights only searches.
         max_results_per_pair: Keep top N results per date pair.
         progress_callback: Called with (index, total, date_pair, result) after each search.
+        incremental_csv_path: If set, write results to this CSV after EACH search
+                              so data is preserved if the process is killed.
 
     Returns:
         List of DatePairResult, one per date pair.
@@ -136,6 +140,17 @@ async def search_date_range(
     else:
         using_browser = True  # Default uses all sources
 
+    # Set up incremental CSV writer (survives SIGKILL up to last flush)
+    _csv_writer = None
+    _csv_file = None
+    _csv_header_written = False
+    if incremental_csv_path:
+        try:
+            _csv_file = open(incremental_csv_path, "w", newline="", encoding="utf-8")
+            logger.info(f"Incremental CSV: {incremental_csv_path}")
+        except Exception as e:
+            logger.warning(f"Could not open incremental CSV: {e}")
+
     for i, pair in enumerate(date_pairs):
         # Build request for this date combination
         trip_type = TripType.ONE_WAY if pair.return_date is None else TripType.ROUND_TRIP
@@ -153,6 +168,10 @@ async def search_date_range(
         )
 
         logger.info(f"[{i + 1}/{total}] Searching {pair.label}...")
+
+        # Log resource usage every 5 searches to track zombie accumulation
+        if i > 0 and i % 5 == 0:
+            log_resource_usage()
 
         pair_result = DatePairResult(date_pair=pair)
 
@@ -176,8 +195,25 @@ async def search_date_range(
 
         results.append(pair_result)
 
+        # Write this result incrementally to CSV (survives process death)
+        if _csv_file is not None:
+            try:
+                row = _result_to_row(pair_result, base_request)
+                if not _csv_header_written:
+                    _csv_writer = csv.DictWriter(_csv_file, fieldnames=row.keys())
+                    _csv_writer.writeheader()
+                    _csv_header_written = True
+                _csv_writer.writerow(row)
+                _csv_file.flush()  # Ensure data hits disk immediately
+            except Exception as e:
+                logger.debug(f"Incremental CSV write failed: {e}")
+
         if progress_callback:
             progress_callback(i, total, pair, pair_result)
+
+        # Clean up zombie Chrome processes between searches (prevents SIGKILL)
+        if using_browser and i > 0 and i % 3 == 0:
+            cleanup_zombie_chrome()
 
         # Delay before next search (skip after the last one)
         if i < total - 1:
@@ -187,6 +223,18 @@ async def search_date_range(
                 delay = random.uniform(*fast_flights_delay)
             logger.info(f"  Waiting {delay:.0f}s before next search...")
             await asyncio.sleep(delay)
+
+    # Close incremental CSV
+    if _csv_file is not None:
+        try:
+            _csv_file.close()
+            logger.info(f"Incremental CSV complete: {incremental_csv_path}")
+        except Exception:
+            pass
+
+    # Final zombie cleanup
+    if using_browser:
+        cleanup_zombie_chrome()
 
     return results
 

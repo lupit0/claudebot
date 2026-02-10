@@ -133,6 +133,12 @@ class RyanairScraper(BaseScraper):
                 if not results:
                     results = await self._search_one_way_general(request, client)
 
+                if not results:
+                    logger.info(
+                        f"Ryanair: no flights {request.origin}→{request.destination} "
+                        f"on {dep_date} (route may not operate daily)"
+                    )
+
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 logger.debug(f"Ryanair: no route {request.origin}→{request.destination}")

@@ -15,10 +15,65 @@ import asyncio
 import logging
 import os
 import random
+import subprocess
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 logger = logging.getLogger(__name__)
+
+
+def cleanup_zombie_chrome() -> int:
+    """Kill orphaned Chrome/Chromium processes left by previous scraper runs.
+
+    Returns the number of processes killed.  Safe to call between searches
+    in batch mode to prevent zombie accumulation that leads to SIGKILL.
+    """
+    killed = 0
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "chrom(e|ium).*--headless"],
+            capture_output=True, text=True, timeout=5,
+        )
+        pids = [p.strip() for p in result.stdout.strip().split("\n") if p.strip()]
+        if pids:
+            for pid in pids:
+                try:
+                    os.kill(int(pid), 9)
+                    killed += 1
+                except (ProcessLookupError, ValueError, PermissionError):
+                    pass
+            if killed:
+                logger.info(f"Cleaned up {killed} orphaned Chrome process(es)")
+    except Exception:
+        pass
+    return killed
+
+
+def log_resource_usage() -> dict:
+    """Log current memory and process info for debugging batch job deaths."""
+    info = {}
+    try:
+        import resource
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        info["max_rss_mb"] = rusage.ru_maxrss / 1024  # KB to MB on Linux
+    except Exception:
+        pass
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-c", "-f", "chrom"],
+            capture_output=True, text=True, timeout=5,
+        )
+        info["chrome_processes"] = int(result.stdout.strip()) if result.stdout.strip() else 0
+    except Exception:
+        info["chrome_processes"] = -1
+
+    if info:
+        logger.info(
+            f"Resource usage: max_rss={info.get('max_rss_mb', '?'):.0f}MB, "
+            f"chrome_procs={info.get('chrome_processes', '?')}"
+        )
+    return info
 
 # ---------------------------------------------------------------------------
 # Shared configuration
@@ -361,9 +416,10 @@ async def _create_pydoll_browser(
     options.headless = headless
 
     # Anti-detection args
+    # NOTE: --no-first-run and --no-default-browser-check are added
+    # automatically by pydoll's BrowserOptionsManager — do NOT add them
+    # here or Chrome will fail with "Argument already exists".
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--no-first-run")
-    options.add_argument("--no-default-browser-check")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-infobars")
     options.add_argument(f"--window-size={viewport['width']},{viewport['height']}")
