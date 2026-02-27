@@ -35,3 +35,14 @@ logs/
 
 # Cache
 .cache/
+
+# Node
+node_modules/
+frontend/build/
+
+# SQLite
+*.db
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
