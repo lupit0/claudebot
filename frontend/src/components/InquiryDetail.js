@@ -48,7 +48,6 @@ export default function InquiryDetail({ inquiryId, refData, onBack }) {
           <Tag label="Tenor" value={inq.tenor || '-'} />
           <Tag label="Rate" value={inq.rate_spread || '-'} />
           <Tag label="Haircut" value={inq.haircut || '-'} />
-          {inq.source_channel && <Tag label="Source" value={inq.source_channel} />}
           {inq.sales_person && <Tag label="Sales" value={inq.sales_person} />}
         </div>
       </div>
@@ -244,11 +243,11 @@ function AttachmentsTab({ inq, fileRef, onRefresh }) {
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <input ref={fileRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.txt,.png,.jpg" onChange={handleUpload} style={{ display: 'none' }} />
+        <input ref={fileRef} type="file" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx,.txt,.png,.jpg,.jpeg,.gif,.bmp,.msg,.eml,.ppt,.pptx,.zip,.rar,.7z" onChange={handleUpload} style={{ display: 'none' }} />
         <button style={styles.addSmall} onClick={() => fileRef.current?.click()} disabled={uploading}>
           {uploading ? 'Uploading...' : '+ Upload File'}
         </button>
-        <span style={{ marginLeft: 10, fontSize: 12, color: '#64748b' }}>PDF, Excel, CSV, Word, images</span>
+        <span style={{ marginLeft: 10, fontSize: 12, color: '#64748b' }}>PDF, Excel, Word, Outlook (.msg/.eml), PowerPoint, images, archives — any file</span>
       </div>
 
       {inq.attachments.length === 0 ? (

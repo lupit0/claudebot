@@ -68,7 +68,6 @@ class InquiryCreate(BaseModel):
     tenor: Optional[str] = None
     rate_spread: Optional[str] = None
     haircut: Optional[str] = None
-    source_channel: Optional[str] = None
     sales_person: Optional[str] = None
     notes: Optional[str] = None
     pasted_data: Optional[str] = None
@@ -85,7 +84,6 @@ class InquiryUpdate(BaseModel):
     rate_spread: Optional[str] = None
     haircut: Optional[str] = None
     status: Optional[str] = None
-    source_channel: Optional[str] = None
     sales_person: Optional[str] = None
     notes: Optional[str] = None
     pasted_data: Optional[str] = None
@@ -102,7 +100,6 @@ class InquirySummary(BaseModel):
     rate_spread: Optional[str] = None
     haircut: Optional[str] = None
     status: str
-    source_channel: Optional[str] = None
     sales_person: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -124,7 +121,6 @@ class InquiryDetail(BaseModel):
     rate_spread: Optional[str] = None
     haircut: Optional[str] = None
     status: str
-    source_channel: Optional[str] = None
     sales_person: Optional[str] = None
     notes: Optional[str] = None
     pasted_data: Optional[str] = None

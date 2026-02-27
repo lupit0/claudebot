@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { fetchInquiries, fetchStats, fetchProductTypes, fetchCurrencies, fetchChannels } from './api';
+import { fetchInquiries, fetchStats, fetchProductTypes, fetchCurrencies } from './api';
 import Blotter from './components/Blotter';
 import InquiryForm from './components/InquiryForm';
 import InquiryDetail from './components/InquiryDetail';
@@ -12,7 +12,7 @@ export default function App() {
   const [inquiries, setInquiries] = useState([]);
   const [stats, setStats] = useState({});
   const [filters, setFilters] = useState({});
-  const [refData, setRefData] = useState({ productTypes: [], currencies: [], channels: [] });
+  const [refData, setRefData] = useState({ productTypes: [], currencies: [] });
 
   const loadInquiries = useCallback(async () => {
     try {
@@ -29,8 +29,8 @@ export default function App() {
   };
 
   useEffect(() => {
-    Promise.all([fetchProductTypes(), fetchCurrencies(), fetchChannels()]).then(
-      ([pt, cur, ch]) => setRefData({ productTypes: pt.data, currencies: cur.data, channels: ch.data })
+    Promise.all([fetchProductTypes(), fetchCurrencies()]).then(
+      ([pt, cur]) => setRefData({ productTypes: pt.data, currencies: cur.data })
     );
   }, []);
 

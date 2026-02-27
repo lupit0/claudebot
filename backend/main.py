@@ -49,11 +49,6 @@ def get_currencies():
     return ["USD", "EUR", "GBP", "JPY", "CHF", "CAD", "AUD", "HKD", "SGD", "CNY"]
 
 
-@app.get("/api/reference/channels")
-def get_channels():
-    return ["Phone", "Bloomberg", "Teams", "Email", "Other"]
-
-
 # ─── Inquiries ────────────────────────────────────────────────────
 
 @app.get("/api/inquiries", response_model=list[InquirySummary])
@@ -95,7 +90,6 @@ def list_inquiries(
             rate_spread=inq.rate_spread,
             haircut=inq.haircut,
             status=inq.status,
-            source_channel=inq.source_channel,
             sales_person=inq.sales_person,
             created_at=inq.created_at,
             updated_at=inq.updated_at,
@@ -116,7 +110,6 @@ def create_inquiry(data: InquiryCreate, db: Session = Depends(get_db)):
         tenor=data.tenor,
         rate_spread=data.rate_spread,
         haircut=data.haircut,
-        source_channel=data.source_channel,
         sales_person=data.sales_person,
         notes=data.notes,
         pasted_data=data.pasted_data,

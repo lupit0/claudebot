@@ -40,7 +40,6 @@ class Inquiry(Base):
     rate_spread = Column(String(100), nullable=True)
     haircut = Column(String(50), nullable=True)
     status = Column(String(20), nullable=False, default=InquiryStatus.NEW.value)
-    source_channel = Column(String(50), nullable=True)  # Phone, Bloomberg, Teams, Email
     sales_person = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
     pasted_data = Column(Text, nullable=True)  # For pasted tables/data

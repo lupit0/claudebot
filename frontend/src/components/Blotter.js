@@ -38,14 +38,14 @@ export default function Blotter({ inquiries, filters, setFilters, onSelect, refD
         <table style={styles.table}>
           <thead>
             <tr>
-              {['ID', 'Status', 'Counterparty', 'Product', 'Direction', 'Notional', 'Ccy', 'Tenor', 'Rate', 'Haircut', 'Source', 'Sales', 'Responses', 'Files', 'Created'].map(h => (
+              {['ID', 'Status', 'Counterparty', 'Product', 'Direction', 'Notional', 'Ccy', 'Tenor', 'Rate', 'Haircut', 'Sales', 'Responses', 'Files', 'Created'].map(h => (
                 <th key={h} style={styles.th}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {inquiries.length === 0 ? (
-              <tr><td colSpan={15} style={styles.empty}>No inquiries found. Click "+ New Inquiry" to create one.</td></tr>
+              <tr><td colSpan={14} style={styles.empty}>No inquiries found. Click "+ New Inquiry" to create one.</td></tr>
             ) : inquiries.map(inq => (
               <tr key={inq.id} style={styles.tr} onClick={() => onSelect(inq.id)}>
                 <td style={styles.td}>{inq.id}</td>
@@ -68,7 +68,6 @@ export default function Blotter({ inquiries, filters, setFilters, onSelect, refD
                 <td style={styles.td}>{inq.tenor || '-'}</td>
                 <td style={styles.td}>{inq.rate_spread || '-'}</td>
                 <td style={styles.td}>{inq.haircut || '-'}</td>
-                <td style={styles.td}>{inq.source_channel || '-'}</td>
                 <td style={styles.td}>{inq.sales_person || '-'}</td>
                 <td style={{ ...styles.td, textAlign: 'center' }}>{inq.response_count}</td>
                 <td style={{ ...styles.td, textAlign: 'center' }}>{inq.attachment_count}</td>

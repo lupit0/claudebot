@@ -26,4 +26,3 @@ export const downloadAttachmentUrl = (id) => `/api/attachments/${id}/download`;
 export const fetchStats = () => API.get('/stats');
 export const fetchProductTypes = () => API.get('/reference/product-types');
 export const fetchCurrencies = () => API.get('/reference/currencies');
-export const fetchChannels = () => API.get('/reference/channels');

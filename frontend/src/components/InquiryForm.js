@@ -5,7 +5,7 @@ export default function InquiryForm({ refData, onCreated, onCancel }) {
   const [form, setForm] = useState({
     counterparty: '', product_type: 'Repo', cash_direction: 'Receive',
     notional: '', currency: 'USD', tenor: '', rate_spread: '', haircut: '',
-    source_channel: 'Bloomberg', sales_person: '', notes: '', pasted_data: '',
+    sales_person: '', notes: '', pasted_data: '',
     collateral_items: [{ isin: '', description: '', quantity: '' }],
   });
   const [submitting, setSubmitting] = useState(false);
@@ -91,18 +91,6 @@ export default function InquiryForm({ refData, onCreated, onCancel }) {
           </Field>
           <Field label="Haircut">
             <input style={styles.input} value={form.haircut} onChange={e => set('haircut', e.target.value)} placeholder="e.g. 2%, 5%" />
-          </Field>
-        </div>
-      </div>
-
-      {/* Source info */}
-      <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>Source Information</h3>
-        <div style={styles.grid}>
-          <Field label="Channel">
-            <select style={styles.input} value={form.source_channel} onChange={e => set('source_channel', e.target.value)}>
-              {refData.channels.map(c => <option key={c}>{c}</option>)}
-            </select>
           </Field>
           <Field label="Sales Person">
             <input style={styles.input} value={form.sales_person} onChange={e => set('sales_person', e.target.value)} placeholder="e.g. John Smith" />
