@@ -1,5 +1,5 @@
 import { LEVELS, TIERS } from '../utils/levels';
-import { equationStr, makeTerm } from '../utils/equations';
+import { equationStr } from '../utils/equations';
 
 export default function LevelSelect({ completed, overrides = {}, customLevels = [], onSelect, onReset, onBuild, onDeleteCustom }) {
   return (
@@ -30,10 +30,7 @@ export default function LevelSelect({ completed, overrides = {}, customLevels = 
           <div className="tier-levels">
             {customLevels.map(lvl => {
               const done = completed.has(lvl.id);
-              const eqStr = equationStr({
-                left:  lvl._raw.left.map(t  => makeTerm(t.num, t.den, t.isVar)),
-                right: lvl._raw.right.map(t => makeTerm(t.num, t.den, t.isVar)),
-              });
+              const eqStr = lvl.title;
               return (
                 <div key={lvl.id} className="custom-level-row">
                   <button

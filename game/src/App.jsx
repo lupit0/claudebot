@@ -4,7 +4,7 @@ import GameScreen       from './components/GameScreen';
 import VictoryScreen    from './components/VictoryScreen';
 import EquationBuilder  from './components/EquationBuilder';
 import { LEVELS }       from './utils/levels';
-import { makeTerm }     from './utils/equations';
+import { makeTerm, makeGroup } from './utils/equations';
 import { randomEquation } from './utils/random';
 import './App.css';
 
@@ -13,6 +13,13 @@ function loadCompleted() {
     const raw = localStorage.getItem('eq-quest-completed');
     return raw ? new Set(JSON.parse(raw)) : new Set();
   } catch { return new Set(); }
+}
+
+function rawToTerm(t) {
+  if (t.type === 'group') {
+    return makeGroup(t.mul.num, t.mul.den, t.inner.map(u => makeTerm(u.num, u.den, u.isVar)));
+  }
+  return makeTerm(t.num, t.den, t.isVar);
 }
 
 function loadCustomLevels() {
@@ -29,8 +36,8 @@ function loadCustomLevels() {
       isCustom: true,
       _raw: { left: d.left, right: d.right },
       initial: () => ({
-        left:  d.left.map(t  => makeTerm(t.num, t.den, t.isVar)),
-        right: d.right.map(t => makeTerm(t.num, t.den, t.isVar)),
+        left:  d.left.map(rawToTerm),
+        right: d.right.map(rawToTerm),
       }),
     }));
   } catch { return []; }
