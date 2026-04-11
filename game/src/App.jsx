@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import LevelSelect   from './components/LevelSelect';
-import GameScreen    from './components/GameScreen';
-import VictoryScreen from './components/VictoryScreen';
-import { LEVELS }   from './utils/levels';
+import LevelSelect      from './components/LevelSelect';
+import GameScreen       from './components/GameScreen';
+import VictoryScreen    from './components/VictoryScreen';
+import EquationBuilder  from './components/EquationBuilder';
+import { LEVELS }       from './utils/levels';
+import { makeTerm }     from './utils/equations';
 import { randomEquation } from './utils/random';
 import './App.css';
 
@@ -13,6 +15,38 @@ function loadCompleted() {
   } catch { return new Set(); }
 }
 
+function loadCustomLevels() {
+  try {
+    const raw = localStorage.getItem('eq-quest-custom');
+    if (!raw) return [];
+    return JSON.parse(raw).map(d => ({
+      id: d.id,
+      tier: 0,
+      tierName: 'Custom',
+      title: d.title,
+      hint: 'Solve for x!',
+      optimalSteps: d.optimalSteps,
+      isCustom: true,
+      _raw: { left: d.left, right: d.right },
+      initial: () => ({
+        left:  d.left.map(t  => makeTerm(t.num, t.den, t.isVar)),
+        right: d.right.map(t => makeTerm(t.num, t.den, t.isVar)),
+      }),
+    }));
+  } catch { return []; }
+}
+
+function saveCustomToStorage(levels) {
+  try {
+    localStorage.setItem('eq-quest-custom', JSON.stringify(
+      levels.map(l => ({
+        id: l.id, title: l.title, optimalSteps: l.optimalSteps,
+        left: l._raw.left, right: l._raw.right,
+      }))
+    ));
+  } catch { /* storage blocked */ }
+}
+
 export default function App() {
   const [screen,    setScreen]    = useState('select');
   const [level,     setLevel]     = useState(null);
@@ -21,10 +55,9 @@ export default function App() {
   const [startEq,   setStartEq]   = useState('');
   const [optimal,   setOptimal]   = useState(1);
   const [completed, setCompleted] = useState(loadCompleted);
-  // Per-level equation overrides, populated on reset to give fresh random equations
   const [overrides, setOverrides] = useState({});
+  const [customLevels, setCustomLevels] = useState(loadCustomLevels);
 
-  // Persist completed set to localStorage whenever it changes
   useEffect(() => {
     try {
       localStorage.setItem('eq-quest-completed', JSON.stringify([...completed]));
@@ -38,7 +71,6 @@ export default function App() {
 
   function resetAll() {
     setCompleted(new Set());
-    // Generate a fresh random equation for every level
     const next = {};
     LEVELS.forEach(l => {
       const eq = randomEquation(l.tier);
@@ -51,12 +83,43 @@ export default function App() {
     setStepsUsed(steps);
     setSolution(sol);
     setStartEq(startEqStr || '');
-    setOptimal(optSteps  ?? level?.optimalSteps ?? 4);
+    setOptimal(optSteps ?? level?.optimalSteps ?? 4);
     setCompleted(prev => new Set([...prev, level.id]));
     setScreen('victory');
   }
 
-  const nextLevel = level ? LEVELS.find(l => l.id === level.id + 1) : null;
+  function handleSaveCustomLevel({ left, right, title, optimalSteps }) {
+    const newId = -(customLevels.length + 1);
+    const lvl = {
+      id: newId,
+      tier: 0,
+      tierName: 'Custom',
+      title,
+      hint: 'Solve for x!',
+      optimalSteps,
+      isCustom: true,
+      _raw: { left, right },
+      initial: () => ({
+        left:  left.map(t  => makeTerm(t.num, t.den, t.isVar)),
+        right: right.map(t => makeTerm(t.num, t.den, t.isVar)),
+      }),
+    };
+    const next = [...customLevels, lvl];
+    setCustomLevels(next);
+    saveCustomToStorage(next);
+    setScreen('select');
+  }
+
+  function deleteCustomLevel(id) {
+    const next = customLevels.filter(l => l.id !== id);
+    setCustomLevels(next);
+    saveCustomToStorage(next);
+  }
+
+  // Custom levels never have a "next" in the built-in progression
+  const nextLevel = level && !level.isCustom
+    ? LEVELS.find(l => l.id === level.id + 1)
+    : null;
 
   return (
     <div className="app">
@@ -64,8 +127,17 @@ export default function App() {
         <LevelSelect
           completed={completed}
           overrides={overrides}
+          customLevels={customLevels}
           onSelect={startLevel}
           onReset={resetAll}
+          onBuild={() => setScreen('builder')}
+          onDeleteCustom={deleteCustomLevel}
+        />
+      )}
+      {screen === 'builder' && (
+        <EquationBuilder
+          onSave={handleSaveCustomLevel}
+          onBack={() => setScreen('select')}
         />
       )}
       {screen === 'game' && level && (
@@ -92,3 +164,4 @@ export default function App() {
     </div>
   );
 }
+
