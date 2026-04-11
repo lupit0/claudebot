@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SheepSVG } from './SheepMascot';
 
 const MESSAGES = [
   'AMAZING!', 'BRILLIANT!', 'PERFECT!', 'STELLAR!', 'FANTASTIC!', 'YOU ROCK!',
@@ -48,6 +49,10 @@ export default function VictoryScreen({ level, steps, solution, startEq, optimal
               ★
             </span>
           ))}
+        </div>
+
+        <div className="victory-sheep-wrap">
+          <SheepSVG pixelSize={10} />
         </div>
 
         <div className="victory-buttons">
