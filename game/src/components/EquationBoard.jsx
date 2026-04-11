@@ -3,52 +3,46 @@ import TermTile from './TermTile';
 export default function EquationBoard({
   state,
   selected,          // { id, side } | null
-  onSelectTerm,
+  second,            // { id, side } | null  (second term for combine)
+  onPointerDown,
   onDoubleClick,
-  actionBar,         // rendered action buttons, passed from parent
+  equalsRef,         // forwarded ref so GameScreen can measure the = position
+  dropSide,          // 'left' | 'right' | null  (highlight during drag)
+  actionBar,
 }) {
   const { left, right } = state;
 
+  const renderSide = (terms, side) => {
+    if (terms.length === 0) return <span className="eq-zero">0</span>;
+    return terms.map(term => {
+      const isSel = selected?.id === term.id || second?.id === term.id;
+      return (
+        <TermTile
+          key={term.id}
+          term={term}
+          selected={isSel}
+          onPointerDown={onPointerDown}
+          onDoubleClick={onDoubleClick}
+          side={side}
+        />
+      );
+    });
+  };
+
   return (
     <div className="equation-board">
-      <div className="eq-side eq-left">
-        {left.length === 0
-          ? <span className="eq-zero">0</span>
-          : left.map(term => (
-              <TermTile
-                key={term.id}
-                term={term}
-                selected={selected?.id === term.id}
-                onSelect={onSelectTerm}
-                onDoubleClick={onDoubleClick}
-                side="left"
-              />
-            ))
-        }
+      <div className={`eq-side eq-left ${dropSide === 'left' ? 'drop-target' : ''}`}>
+        {renderSide(left, 'left')}
       </div>
 
-      <div className="eq-equals">=</div>
+      <div className="eq-equals" ref={equalsRef}>=</div>
 
-      <div className="eq-side eq-right">
-        {right.length === 0
-          ? <span className="eq-zero">0</span>
-          : right.map(term => (
-              <TermTile
-                key={term.id}
-                term={term}
-                selected={selected?.id === term.id}
-                onSelect={onSelectTerm}
-                onDoubleClick={onDoubleClick}
-                side="right"
-              />
-            ))
-        }
+      <div className={`eq-side eq-right ${dropSide === 'right' ? 'drop-target' : ''}`}>
+        {renderSide(right, 'right')}
       </div>
 
       {actionBar && (
-        <div className="action-bar">
-          {actionBar}
-        </div>
+        <div className="action-bar">{actionBar}</div>
       )}
     </div>
   );

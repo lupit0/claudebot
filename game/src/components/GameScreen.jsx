@@ -1,11 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import EquationBoard from './EquationBoard';
 import {
-  moveTerm, combineTerms, multiplyBothSides, expandGroup, checkWin, narrate, equationStr,
+  moveTerm, combineTerms, multiplyBothSides, expandGroup,
+  checkWin, narrate, equationStr,
 } from '../utils/equations';
-import { frac } from '../utils/fractions';
+import { frac, termMagLabel } from '../utils/fractions';
+import { sounds } from '../utils/sounds';
+import { randomEquation } from '../utils/random';
 
-const MULTIPLY_PRESETS = ['2', '3', '4', '5', '6', '1/2', '1/3', '1/4', '2/3', '3/2', '3/4', '4/3', '-1'];
+const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','4/3','-1'];
+const DRAG_THRESHOLD   = 10; // px before a touch/mouse is considered a drag
 
 function parseFrac(str) {
   str = str.trim();
@@ -20,132 +24,216 @@ function parseFrac(str) {
 }
 
 export default function GameScreen({ level, onWin, onBack }) {
-  const [history,  setHistory]  = useState([level.initial()]);
+  const initialState = useCallback(() => level.initial(), [level]);
+
+  const [history,  setHistory]  = useState(() => [initialState()]);
   const [step,     setStep]     = useState(0);
-  const [narrates, setNarrates] = useState([equationStr(level.initial())]);
+  const [narrates, setNarrates] = useState(() => [equationStr(initialState())]);
   const [selected, setSelected] = useState(null);   // { id, side }
-  const [second,   setSecond]   = useState(null);   // second selected term for combine
+  const [second,   setSecond]   = useState(null);   // second term for combine
   const [mulOpen,  setMulOpen]  = useState(false);
   const [mulInput, setMulInput] = useState('');
   const [mulError, setMulError] = useState('');
-  const [flash,    setFlash]    = useState('');     // 'correct' | 'wrong'
-  const [won,      setWon]      = useState(false);
+  const [flash,    setFlash]    = useState('');
+  const [dropSide, setDropSide] = useState(null);   // drag feedback
+
+  // Refs for drag (avoids stale closures & re-renders during drag)
+  const equalsRef  = useRef(null);
+  const ghostRef   = useRef(null);
+  const dragRef    = useRef(null);  // { termId, side, coeff, isVar, startX, startY, isDragging }
 
   const state = history[step];
 
-  // push a new state onto history
+  // ── push a new equation state ──────────────────────────
   function push(newState, op) {
-    const next = history.slice(0, step + 1);
-    setHistory([...next, newState]);
-    setStep(step + 1);
-    setNarrates(prev => [...prev.slice(0, step + 1), narrate(state, newState, op)]);
+    setHistory(h => [...h.slice(0, step + 1), newState]);
+    setStep(s => s + 1);
+    setNarrates(n => [...n.slice(0, step + 1), narrate(state, newState, op)]);
     setSelected(null);
     setSecond(null);
-
-    // Show flash
     setFlash('correct');
     setTimeout(() => setFlash(''), 600);
-
-    // Check win
     if (checkWin(newState)) {
-      setTimeout(() => { setWon(true); onWin(step + 1); }, 700);
+      setTimeout(() => onWin(step + 1), 700);
     }
   }
 
   function undo() {
     if (step === 0) return;
-    setStep(step - 1);
+    setStep(s => s - 1);
     setSelected(null);
     setSecond(null);
     setMulOpen(false);
   }
 
-  function handleSelect(id, side) {
-    // Deselect if clicking the already-selected term
-    if (selected?.id === id) {
-      setSelected(null);
-      setSecond(null);
-      return;
-    }
+  // ── tap/select logic (called when there was no real drag) ──
+  function handleTap(termId, side) {
+    sounds.select();
 
-    // If no primary selected yet → select it as primary
+    if (selected?.id === termId) {
+      setSelected(null); setSecond(null); return;
+    }
     if (!selected) {
-      setSelected({ id, side });
-      setSecond(null);
-      return;
+      setSelected({ id: termId, side }); setSecond(null); return;
     }
-
-    // If same side → check for combine (must be like terms)
     if (side === selected.side) {
-      const primary = [...state.left, ...state.right].find(t => t.id === selected.id);
-      const target  = [...state.left, ...state.right].find(t => t.id === id);
+      const all = [...state.left, ...state.right];
+      const primary = all.find(t => t.id === selected.id);
+      const target  = all.find(t => t.id === termId);
       if (primary && target && primary.type !== 'group' && target.type !== 'group'
           && primary.isVar === target.isVar) {
-        // Select as second for combine
-        setSecond({ id, side });
-      } else {
-        // Switch primary selection
-        setSelected({ id, side });
-        setSecond(null);
+        setSecond({ id: termId, side }); return;
       }
-      return;
     }
-
-    // Different side → switch primary
-    setSelected({ id, side });
-    setSecond(null);
+    setSelected({ id: termId, side }); setSecond(null);
   }
 
-  function handleDoubleClick(id, side) {
-    const term = [...state.left, ...state.right].find(t => t.id === id);
+  // ── double-tap: expand a group ─────────────────────────
+  function handleDoubleClick(termId, side) {
+    const term = [...state.left, ...state.right].find(t => t.id === termId);
     if (term?.type === 'group') {
-      push(expandGroup(state, id, side), { type: 'expand' });
+      sounds.expand();
+      push(expandGroup(state, termId, side), { type: 'expand' });
     }
   }
 
-  function doMove() {
-    if (!selected) return;
-    push(moveTerm(state, selected.id, selected.side), { type: 'move', fromSide: selected.side });
-  }
+  // ── drag: pointer down on a term tile ─────────────────
+  // We capture the handlers in closures here so they always see
+  // the latest `state`, `push`, etc. without stale issues.
+  // Ghost element is manipulated via DOM to avoid React re-renders during drag.
+  const handleTermPointerDown = useCallback((e, term, side) => {
+    // Ignore right-click / multi-touch
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (!e.isPrimary) return;
 
+    dragRef.current = {
+      termId: term.id,
+      side,
+      coeff: term.coeff,
+      isVar: term.isVar,
+      type: term.type,
+      startX: e.clientX,
+      startY: e.clientY,
+      isDragging: false,
+    };
+
+    // Pre-fill ghost label
+    const ghost = ghostRef.current;
+    if (ghost) {
+      ghost.textContent = (term.type === 'group')
+        ? `(${term.inner?.length ?? '?'} terms)`
+        : (term.coeff.num < 0 ? '− ' : '+ ') + termMagLabel(term.coeff, term.isVar);
+      ghost.className = `drag-ghost ${term.isVar || term.type === 'group' ? 'term-var' : 'term-const'}`;
+    }
+
+    const onMove = (ev) => {
+      if (!dragRef.current) return;
+      const dx = ev.clientX - dragRef.current.startX;
+      const dy = ev.clientY - dragRef.current.startY;
+      if (!dragRef.current.isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
+        dragRef.current.isDragging = true;
+        if (ghost) ghost.style.display = 'flex';
+      }
+      if (dragRef.current.isDragging && ghost) {
+        ghost.style.left = ev.clientX + 'px';
+        ghost.style.top  = ev.clientY + 'px';
+
+        // Compute which side the ghost is hovering over
+        const eqRect = equalsRef.current?.getBoundingClientRect();
+        if (eqRect) {
+          const cx = eqRect.left + eqRect.width / 2;
+          if (dragRef.current.side === 'left')  setDropSide(ev.clientX > cx ? 'right' : null);
+          if (dragRef.current.side === 'right') setDropSide(ev.clientX < cx ? 'left'  : null);
+        }
+      }
+    };
+
+    const onUp = (ev) => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup',   onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (ghost) ghost.style.display = 'none';
+      setDropSide(null);
+
+      const info = dragRef.current;
+      if (!info) return;
+      dragRef.current = null;
+
+      if (info.isDragging) {
+        const eqEl = equalsRef.current;
+        if (eqEl) {
+          const rect = eqEl.getBoundingClientRect();
+          const cx   = rect.left + rect.width / 2;
+          const crossed =
+            (info.side === 'left'  && ev.clientX > cx) ||
+            (info.side === 'right' && ev.clientX < cx);
+          if (crossed) {
+            // Use the current state snapshot captured at pointer-down time.
+            // Because no React re-renders happen during drag (ghost is DOM-only),
+            // `state` here is the same render's value — always fresh.
+            const newState = moveTerm(state, info.termId, info.side);
+            push(newState, { type: 'move', fromSide: info.side });
+            sounds.move();
+          }
+        }
+      } else {
+        // Tap — delegate to select logic
+        handleTap(info.termId, info.side);
+      }
+    };
+
+    window.addEventListener('pointermove',  onMove);
+    window.addEventListener('pointerup',    onUp);
+    window.addEventListener('pointercancel', onUp);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, step]); // re-create when state or step changes so closures are fresh
+
+  // ── combine ───────────────────────────────────────────
   function doCombine() {
     if (!selected || !second) return;
+    sounds.combine();
     push(combineTerms(state, selected.id, second.id, selected.side), { type: 'combine', side: selected.side });
   }
 
+  // ── multiply both sides ───────────────────────────────
   function doMultiply() {
     const f = parseFrac(mulInput);
-    if (!f) { setMulError('Enter a valid number like 2, 1/3, -1'); return; }
+    if (!f) { setMulError('Enter a number like 2, 1/3, -1'); return; }
+    sounds.multiply();
     push(multiplyBothSides(state, f.num, f.den), { type: 'multiply', num: f.num, den: f.den });
-    setMulOpen(false);
-    setMulInput('');
-    setMulError('');
+    setMulOpen(false); setMulInput(''); setMulError('');
   }
 
-  // Keyboard shortcut: Enter to apply when multiply panel open
+  // ── recycle: generate a fresh random equation ─────────
+  function recycle() {
+    const eq = randomEquation(level.tier);
+    if (!eq) return;
+    sounds.recycle();
+    setHistory([eq]);
+    setStep(0);
+    setNarrates([equationStr(eq)]);
+    setSelected(null); setSecond(null); setMulOpen(false);
+  }
+
   useEffect(() => {
-    const handler = e => { if (e.key === 'Enter' && mulOpen) doMultiply(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
+    const h = e => { if (e.key === 'Enter' && mulOpen) doMultiply(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
   });
 
+  // ── action bar ────────────────────────────────────────
   const selectedTerm = selected
     ? [...state.left, ...state.right].find(t => t.id === selected.id)
     : null;
-
-  const canMove    = !!selected;
   const canCombine = !!selected && !!second;
   const canExpand  = selectedTerm?.type === 'group';
 
   const actionBar = selected ? (
     <div className="action-buttons">
-      {canExpand ? (
-        <button className="action-btn btn-expand" onClick={() => handleDoubleClick(selected.id, selected.side)}>
+      {canExpand && (
+        <button className="action-btn btn-expand"
+          onClick={() => handleDoubleClick(selected.id, selected.side)}>
           EXPAND ( )
-        </button>
-      ) : (
-        <button className="action-btn btn-move" onClick={doMove}>
-          {selected.side === 'left' ? 'MOVE →' : '← MOVE'}
         </button>
       )}
       {canCombine && (
@@ -153,7 +241,11 @@ export default function GameScreen({ level, onWin, onBack }) {
           COMBINE
         </button>
       )}
-      <button className="action-btn btn-cancel" onClick={() => { setSelected(null); setSecond(null); }}>
+      {!canExpand && !canCombine && (
+        <div className="drag-hint-bar">← drag past = to move →</div>
+      )}
+      <button className="action-btn btn-cancel"
+        onClick={() => { setSelected(null); setSecond(null); }}>
         ✕
       </button>
     </div>
@@ -161,6 +253,9 @@ export default function GameScreen({ level, onWin, onBack }) {
 
   return (
     <div className={`game-screen ${flash}`}>
+      {/* Drag ghost (DOM-only, never re-rendered by React during drag) */}
+      <div ref={ghostRef} className="drag-ghost" style={{ display: 'none' }} aria-hidden />
+
       {/* Header */}
       <div className="game-header">
         <button className="pixel-btn btn-back" onClick={onBack}>← BACK</button>
@@ -168,7 +263,14 @@ export default function GameScreen({ level, onWin, onBack }) {
           <span className="tier-name">{level.tierName}</span>
           <span className="level-num">LV {level.id}</span>
         </div>
-        <button className="pixel-btn btn-undo" onClick={undo} disabled={step === 0}>UNDO</button>
+        <div className="header-right">
+          <button className="pixel-btn btn-recycle" onClick={recycle} title="New random equation">
+            ↺
+          </button>
+          <button className="pixel-btn btn-undo" onClick={undo} disabled={step === 0}>
+            UNDO
+          </button>
+        </div>
       </div>
 
       {/* Hint */}
@@ -177,13 +279,16 @@ export default function GameScreen({ level, onWin, onBack }) {
       {/* Equation board */}
       <EquationBoard
         state={state}
-        selected={selected || second}
-        onSelectTerm={handleSelect}
+        selected={selected}
+        second={second}
+        onPointerDown={handleTermPointerDown}
         onDoubleClick={handleDoubleClick}
+        equalsRef={equalsRef}
+        dropSide={dropSide}
         actionBar={actionBar}
       />
 
-      {/* Multiply panel */}
+      {/* Multiply both sides */}
       <div className="multiply-panel">
         {!mulOpen ? (
           <button className="pixel-btn btn-multiply" onClick={() => setMulOpen(true)}>
@@ -191,10 +296,11 @@ export default function GameScreen({ level, onWin, onBack }) {
           </button>
         ) : (
           <div className="mul-input-row">
-            <span className="mul-label">Multiply by:</span>
+            <span className="mul-label">Multiply both sides by:</span>
             <div className="mul-presets">
               {MULTIPLY_PRESETS.map(p => (
-                <button key={p} className="preset-btn" onClick={() => setMulInput(p)}>{p}</button>
+                <button key={p} className="preset-btn"
+                  onClick={() => setMulInput(p)}>{p}</button>
               ))}
             </div>
             <div className="mul-entry">
@@ -207,7 +313,8 @@ export default function GameScreen({ level, onWin, onBack }) {
                 autoFocus
               />
               <button className="pixel-btn btn-go" onClick={doMultiply}>GO!</button>
-              <button className="pixel-btn btn-cancel-mul" onClick={() => { setMulOpen(false); setMulError(''); }}>✕</button>
+              <button className="pixel-btn btn-cancel-mul"
+                onClick={() => { setMulOpen(false); setMulError(''); }}>✕</button>
             </div>
             {mulError && <div className="mul-error">{mulError}</div>}
           </div>

@@ -87,12 +87,22 @@ export function checkWin(state) {
   const rVars   = right.filter(t => t.isVar);
   const rConst  = right.filter(t => !t.isVar);
 
-  // x = N  or  -x = N  (coefficient magnitude 1)
-  const singleVar  = (v, c) => v.length === 1 && c.length === 1 && absEqOneF(v[0].coeff);
+  // x = N  or  -x = N  (coefficient magnitude 1, zero constants on same side)
+  // Also filter out stray zero-coefficient terms that didn't get cleaned up
+  const nonZero = ts => ts.filter(t => !isZeroF(t.coeff));
+  const lVarsNZ  = nonZero(lVars);
+  const lConstNZ = nonZero(lConst);
+  const rVarsNZ  = nonZero(rVars);
+  const rConstNZ = nonZero(rConst);
+
+  const singleVar   = (v, c) => v.length === 1 && c.length === 0 && absEqOneF(v[0].coeff);
   const singleConst = (v, c) => v.length === 0 && c.length === 1;
 
-  return (singleVar(lVars, lConst) && singleConst(rVars, rConst)) ||
-         (singleConst(lVars, lConst) && singleVar(rVars, rConst));
+  // Re-bind with zero-filtered arrays
+  const lV = lVarsNZ, lC = lConstNZ, rV = rVarsNZ, rC = rConstNZ;
+
+  return (singleVar(lV, lC) && singleConst(rV, rC)) ||
+         (singleConst(lV, lC) && singleVar(rV, rC));
 }
 
 // Narrate the last operation

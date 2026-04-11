@@ -70,14 +70,17 @@ body::after {
 }
 .pixel-btn:disabled { opacity: 0.4; cursor: default; }
 
-.btn-back     { background: #333; color: #aaa; }
-.btn-undo     { background: #1a3a5c; color: var(--cyan); }
+.btn-back     { background: #333;    color: #aaa;           }
+.btn-undo     { background: #1a3a5c; color: var(--cyan);   }
+.btn-recycle  { background: #1a3a1a; color: var(--green); font-size: 14px; padding: 6px 10px; }
 .btn-multiply { background: #2a1a5c; color: var(--purple); }
-.btn-go       { background: #1a5c2a; color: var(--green); }
+.btn-go       { background: #1a5c2a; color: var(--green);  }
 .btn-cancel-mul { background: #5c1a1a; color: var(--red); font-size: 10px; }
-.btn-replay   { background: #1a3a5c; color: var(--cyan); }
-.btn-next     { background: #1a5c2a; color: var(--green); }
-.btn-levels   { background: #333; color: #aaa; }
+.btn-replay   { background: #1a3a5c; color: var(--cyan);   }
+.btn-next     { background: #1a5c2a; color: var(--green);  }
+.btn-levels   { background: #333;    color: #aaa;           }
+
+.header-right { display: flex; gap: 6px; align-items: center; }
 
 /* ─── Level Select ──────────────────────────────────────── */
 .level-select { padding: 24px 0; }
@@ -218,20 +221,22 @@ body::after {
 /* ─── Term Tile ─────────────────────────────────────────── */
 .term-tile {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(10px, 3.5vw, 14px);
+  font-size: clamp(11px, 3.8vw, 16px);
   border: 3px solid #000;
   box-shadow: var(--pixel-shadow);
-  padding: 10px 14px;
-  cursor: pointer;
+  padding: 12px 16px;
+  cursor: grab;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   transition: transform 0.08s, box-shadow 0.08s, border-color 0.1s;
   position: relative;
   user-select: none;
   -webkit-user-select: none;
+  /* Prevents browser scroll hijack on touch */
+  touch-action: none;
 }
-.term-tile:active { transform: translate(2px,2px); box-shadow: 2px 2px 0 #000; }
+.term-tile:active { cursor: grabbing; }
 .term-tile.term-var   { background: #152a5c; border-color: var(--blue);   color: var(--cyan);  }
 .term-tile.term-const { background: #3a1a00; border-color: var(--orange); color: #ffd28a;      }
 .term-tile.term-group { background: #2a1a3a; border-color: var(--purple); color: #d4a0ff;      }
@@ -244,8 +249,24 @@ body::after {
   from { box-shadow: 4px 4px 0 #000, 0 0 10px var(--yellow); }
   to   { box-shadow: 4px 4px 0 #000, 0 0 22px var(--yellow); }
 }
-.term-sign  { font-size: 0.75em; color: #888; margin-right: 2px; }
+
+/* ── Signs: big, coloured, prominent ──── */
+.term-sign {
+  font-size: 1.15em;   /* same scale as the label */
+  font-weight: bold;
+  margin-right: 3px;
+  line-height: 1;
+}
+.sign-pos { color: #7ecfff; }   /* bright blue-white for + */
+.sign-neg { color: #ff8c69; }   /* warm coral for  − */
+/* Override per tile colour so sign always pops */
+.term-const .sign-pos { color: #ffe066; }
+.term-const .sign-neg { color: #ff6b6b; }
+.term-group .sign-pos { color: #c4a0ff; }
+.term-group .sign-neg { color: #ff6b9d; }
+
 .term-label { font-weight: bold; }
+
 .expand-hint {
   font-size: 7px;
   color: var(--purple);
@@ -257,6 +278,47 @@ body::after {
   animation: blink 1.2s infinite;
 }
 @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+/* ── Drag ghost (follows pointer via DOM, not React state) ── */
+.drag-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: 1000;
+  display: none;   /* shown via style.display = 'flex' during drag */
+  align-items: center;
+  gap: 6px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(11px, 3.8vw, 16px);
+  font-weight: bold;
+  padding: 12px 16px;
+  border: 3px solid var(--yellow);
+  box-shadow: 4px 4px 0 #000, 0 0 16px rgba(255,215,0,0.5);
+  opacity: 0.88;
+  transform: translate(-50%, -50%) rotate(-3deg) scale(1.08);
+  white-space: nowrap;
+}
+.drag-ghost.term-var   { background: #152a5c; color: var(--cyan);  }
+.drag-ghost.term-const { background: #3a1a00; color: #ffd28a;      }
+
+/* ── Drop-target highlight on the receiving side ── */
+.eq-side.drop-target {
+  background: rgba(255, 215, 0, 0.07);
+  border-radius: 0;
+  outline: 2px dashed rgba(255, 215, 0, 0.4);
+  animation: drop-pulse 0.6s infinite alternate;
+}
+@keyframes drop-pulse {
+  from { outline-color: rgba(255,215,0,0.2); }
+  to   { outline-color: rgba(255,215,0,0.7); }
+}
+
+/* ── Drag hint (shown when a term is selected but not yet combined/expanded) ── */
+.drag-hint-bar {
+  font-size: 8px;
+  color: var(--yellow);
+  animation: blink 1.2s infinite;
+  padding: 4px 8px;
+}
 
 /* ─── Action Bar ────────────────────────────────────────── */
 .action-bar {
