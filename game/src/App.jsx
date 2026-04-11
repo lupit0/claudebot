@@ -43,7 +43,11 @@ export default function App() {
   return (
     <div className="app">
       {screen === 'select' && (
-        <LevelSelect completed={completed} onSelect={startLevel} />
+        <LevelSelect
+          completed={completed}
+          onSelect={startLevel}
+          onReset={() => setCompleted(new Set())}
+        />
       )}
       {screen === 'game' && level && (
         <GameScreen

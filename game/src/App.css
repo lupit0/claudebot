@@ -86,6 +86,17 @@ body::after {
 /* ─── Level Select ──────────────────────────────────────── */
 .level-select { padding: 24px 0; }
 
+.select-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px 20px;
+}
+.progress-label {
+  font-size: 8px;
+  color: var(--cyan);
+}
+
 .game-title {
   text-align: center;
   margin-bottom: 32px;

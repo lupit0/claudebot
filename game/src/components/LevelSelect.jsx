@@ -1,12 +1,30 @@
 import { LEVELS, TIERS } from '../utils/levels';
 
-export default function LevelSelect({ completed, onSelect }) {
+export default function LevelSelect({ completed, onSelect, onReset }) {
+  function handleReset() {
+    if (completed.size === 0) return;
+    if (window.confirm('Reset all progress? This cannot be undone.')) {
+      onReset();
+    }
+  }
+
   return (
     <div className="level-select">
       <div className="game-title">
         <div className="title-line1">EQUATION</div>
         <div className="title-line2">QUEST</div>
         <div className="title-sub">Solve for X!</div>
+      </div>
+      <div className="select-toolbar">
+        <span className="progress-label">
+          {completed.size}/{LEVELS.length} SOLVED
+        </span>
+        <button
+          className="pixel-btn btn-recycle"
+          onClick={handleReset}
+          disabled={completed.size === 0}
+          title="Reset all progress"
+        >↺ RESET</button>
       </div>
 
       {TIERS.map(tier => (
