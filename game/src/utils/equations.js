@@ -1,4 +1,4 @@
-import { addF, mulF, negF, frac, isZeroF, absEqOneF } from './fractions';
+import { addF, mulF, negF, frac, isZeroF, absEqOneF, isPosOneF } from './fractions';
 
 let _id = 0;
 const uid = () => String(++_id);
@@ -95,7 +95,8 @@ export function checkWin(state) {
   const rVarsNZ  = nonZero(rVars);
   const rConstNZ = nonZero(rConst);
 
-  const singleVar   = (v, c) => v.length === 1 && c.length === 0 && absEqOneF(v[0].coeff);
+  // Only x = N counts as solved, not -x = N (student must clear the negative)
+  const singleVar   = (v, c) => v.length === 1 && c.length === 0 && isPosOneF(v[0].coeff);
   const singleConst = (v, c) => v.length === 0 && c.length === 1;
 
   // Re-bind with zero-filtered arrays
@@ -125,6 +126,65 @@ export function narrate(prevState, nextState, op) {
     default:
       return '';
   }
+}
+
+// Suggest the single best next step for the solver hint.
+// Returns a plain-data object (no functions) describing what to do.
+export function suggestNextStep(state) {
+  const { left, right } = state;
+  const nz = ts => ts.filter(t => !isZeroF(t.coeff));
+
+  // 1. Expand groups first
+  for (const side of ['left', 'right']) {
+    const g = state[side].find(t => t.type === 'group');
+    if (g) return { type: 'expand', termId: g.id, side,
+      description: 'Expand the parentheses' };
+  }
+
+  const lVars   = nz(left.filter(t => t.isVar));
+  const lConsts = nz(left.filter(t => !t.isVar));
+  const rVars   = nz(right.filter(t => t.isVar));
+  const rConsts = nz(right.filter(t => !t.isVar));
+
+  // 2. Combine like terms on same side
+  if (lVars.length   >= 2) return { type: 'combine', id1: lVars[0].id,   id2: lVars[1].id,   side: 'left',  description: 'Combine the x terms on the left' };
+  if (rVars.length   >= 2) return { type: 'combine', id1: rVars[0].id,   id2: rVars[1].id,   side: 'right', description: 'Combine the x terms on the right' };
+  if (lConsts.length >= 2) return { type: 'combine', id1: lConsts[0].id, id2: lConsts[1].id, side: 'left',  description: 'Combine the numbers on the left' };
+  if (rConsts.length >= 2) return { type: 'combine', id1: rConsts[0].id, id2: rConsts[1].id, side: 'right', description: 'Combine the numbers on the right' };
+
+  // 3. Decide which side should hold the variable (prefer left)
+  if (lVars.length > 0 && rVars.length > 0) {
+    // Variables on both sides → move one from right to left
+    return { type: 'move', termId: rVars[0].id, fromSide: 'right',
+      description: 'Move the x term to the left side' };
+  }
+
+  const varSide   = lVars.length > 0 ? 'left' : 'right';
+  const constSide = varSide === 'left' ? 'right' : 'left';
+  const varTerms  = varSide === 'left' ? lVars : rVars;
+  const strayCons = varSide === 'left' ? lConsts : rConsts;
+
+  // 4. Move stray constants off the variable side
+  if (strayCons.length > 0) {
+    return { type: 'move', termId: strayCons[0].id, fromSide: varSide,
+      description: `Move the number to the ${constSide} side` };
+  }
+
+  // 5. Clear the coefficient
+  const varTerm = varTerms[0];
+  if (!varTerm) return null;
+  const { num, den } = varTerm.coeff;
+
+  if (num < 0) return { type: 'negate',
+    description: 'x is negative — change sign on both sides' };
+
+  if (num !== den) {
+    // Multiply by den/num to make coefficient 1
+    return { type: 'multiply', num: den, den: num,
+      description: `Multiply both sides by ${den}/${num === 1 ? den : num} to get x alone` };
+  }
+
+  return null; // already solved
 }
 
 // Stringify the equation for step history

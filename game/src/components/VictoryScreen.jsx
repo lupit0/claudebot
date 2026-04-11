@@ -4,7 +4,7 @@ const MESSAGES = [
   'AMAZING!', 'BRILLIANT!', 'PERFECT!', 'STELLAR!', 'FANTASTIC!', 'YOU ROCK!',
 ];
 
-export default function VictoryScreen({ level, steps, onNext, onReplay, onBack }) {
+export default function VictoryScreen({ level, steps, solution, onNext, onReplay, onBack }) {
   const [msg] = useState(() => MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
   const [stars, setStars] = useState(0);
 
@@ -33,6 +33,9 @@ export default function VictoryScreen({ level, steps, onNext, onReplay, onBack }
       <div className="victory-content">
         <div className="victory-msg">{msg}</div>
         <div className="victory-title">{level.title}</div>
+        {solution && (
+          <div className="victory-solution">{solution}</div>
+        )}
         <div className="victory-sub">SOLVED IN {steps} STEP{steps !== 1 ? 'S' : ''}!</div>
 
         <div className="star-row">

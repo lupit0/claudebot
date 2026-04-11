@@ -74,7 +74,8 @@ body::after {
 .btn-undo     { background: #1a3a5c; color: var(--cyan);   }
 .btn-recycle  { background: #1a3a1a; color: var(--green); font-size: 14px; padding: 6px 10px; }
 .btn-multiply { background: #2a1a5c; color: var(--purple); }
-.btn-go       { background: #1a5c2a; color: var(--green);  }
+.btn-go       { background: #1a5c2a; color: var(--green);   }
+.btn-hint     { background: #3a2800; color: var(--yellow); font-size: 13px; padding: 6px 10px; }
 .btn-cancel-mul { background: #5c1a1a; color: var(--red); font-size: 10px; }
 .btn-replay   { background: #1a3a5c; color: var(--cyan);   }
 .btn-next     { background: #1a5c2a; color: var(--green);  }
@@ -476,6 +477,16 @@ body::after {
   box-shadow: var(--pixel-shadow);
   background: var(--panel);
 }
+.victory-solution {
+  font-size: clamp(20px, 6vw, 30px);
+  color: var(--green);
+  text-shadow: 3px 3px 0 #000, 0 0 20px var(--green);
+  padding: 10px 24px;
+  border: 3px solid var(--green);
+  box-shadow: var(--pixel-shadow);
+  background: #0a1a0a;
+  animation: pop-in 0.4s 0.1s cubic-bezier(0.34,1.56,0.64,1) both;
+}
 .victory-sub  { font-size: 9px; color: #aaa; }
 .star-row     { display: flex; gap: 16px; }
 .star-icon    { font-size: 32px; color: #333; transition: color 0.2s, text-shadow 0.2s; text-shadow: 2px 2px 0 #000; }
@@ -487,6 +498,80 @@ body::after {
 }
 @keyframes star-pop { from { transform: scale(0.5); } to { transform: scale(1); } }
 .victory-buttons { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+
+/* ─── Hint active message ───────────────────────────────── */
+.hint-active {
+  color: var(--yellow);
+  animation: blink 0.8s 3;
+}
+
+/* ─── Flying Sheep Mascot ───────────────────────────────── */
+.sheep-mascot {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  pointer-events: none;
+  /* Size: 9 cols × 8 rows × 4px = 36px × 32px + padding */
+  width: 40px;
+  height: 36px;
+}
+
+/* The single 4px anchor from which all sheep pixels are box-shadowed */
+.sheep-px {
+  position: absolute;
+  bottom: 0; left: 0;
+  width: 4px;
+  height: 4px;
+  background: transparent;
+}
+
+/* ── Idle: gentle float ── */
+.sheep-idle .sheep-px {
+  animation: sheep-float 2.8s ease-in-out infinite;
+}
+@keyframes sheep-float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-7px); }
+}
+
+/* ── Happy: big bounce + wiggle ── */
+.sheep-happy .sheep-px {
+  animation: sheep-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes sheep-bounce {
+  0%   { transform: translateY(0)    rotate(0deg)   scale(1.0); }
+  35%  { transform: translateY(-28px) rotate(-12deg) scale(1.15); }
+  65%  { transform: translateY(-14px) rotate(10deg)  scale(1.08); }
+  100% { transform: translateY(0)    rotate(0deg)   scale(1.0); }
+}
+
+/* ── Thinking: side wobble ── */
+.sheep-thinking .sheep-px {
+  animation: sheep-think 0.35s ease-in-out 4;
+}
+@keyframes sheep-think {
+  0%, 100% { transform: rotate(0deg); }
+  30%      { transform: rotate(-10deg) translateX(-3px); }
+  70%      { transform: rotate( 10deg) translateX( 3px); }
+}
+
+/* ── Win: fly off the screen diagonally ── */
+.sheep-win {
+  animation: sheep-win-wrap 2s ease-in forwards;
+}
+@keyframes sheep-win-wrap {
+  0%   { bottom: 20px; right: 20px; opacity: 1; }
+  15%  { bottom: 60px; right: 40px; }
+  100% { bottom: 110vh; right: -30vw; opacity: 0; }
+}
+.sheep-win .sheep-px {
+  animation: sheep-spin 2s ease-in forwards;
+}
+@keyframes sheep-spin {
+  0%   { transform: rotate(0deg)   scale(1.0); }
+  100% { transform: rotate(900deg) scale(2.0); }
+}
 
 /* ─── Scrollbar ─────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }

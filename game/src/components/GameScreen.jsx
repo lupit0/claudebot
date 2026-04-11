@@ -2,11 +2,12 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import EquationBoard from './EquationBoard';
 import {
   moveTerm, combineTerms, multiplyBothSides, expandGroup,
-  checkWin, narrate, equationStr,
+  checkWin, narrate, equationStr, suggestNextStep,
 } from '../utils/equations';
 import { frac, termMagLabel } from '../utils/fractions';
 import { sounds } from '../utils/sounds';
 import { randomEquation } from '../utils/random';
+import SheepMascot from './SheepMascot';
 
 const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','4/3','-1'];
 const DIVIDE_PRESETS   = ['2','3','4','5','6','8','10'];
@@ -36,8 +37,10 @@ export default function GameScreen({ level, onWin, onBack }) {
   const [divOpen,  setDivOpen]  = useState(false);
   const [divInput, setDivInput] = useState('');
   const [divError, setDivError] = useState('');
-  const [flash,    setFlash]    = useState('');
-  const [dropSide, setDropSide] = useState(null);
+  const [flash,      setFlash]      = useState('');
+  const [dropSide,   setDropSide]   = useState(null);
+  const [sheepMood,  setSheepMood]  = useState('idle');
+  const [hintMsg,    setHintMsg]    = useState('');
 
   const state = history[step];
 
@@ -66,8 +69,63 @@ export default function GameScreen({ level, onWin, onBack }) {
     setSelected(null);
     setSecond(null);
     setFlash('correct');
+    setSheepMood('happy');
+    setTimeout(() => setSheepMood('idle'), 700);
     setTimeout(() => setFlash(''), 600);
-    if (checkWin(newState)) setTimeout(() => onWin(nextStep), 700);
+    if (checkWin(newState)) {
+      // Extract solution string: find "x = N" or "N = x"
+      const sol = extractSolution(newState);
+      setSheepMood('win');
+      setTimeout(() => onWin(nextStep, sol), 700);
+    }
+  }
+
+  // ─── show the solution string from a solved state ────────
+  function extractSolution(s) {
+    const all = [...s.left, ...s.right];
+    const varTerm   = all.find(t => t.isVar);
+    const constTerm = all.find(t => !t.isVar);
+    if (!varTerm || !constTerm) return null;
+    const val = constTerm.coeff;
+    const valStr = val.den === 1 ? String(val.num) : `${val.num}/${val.den}`;
+    return `x = ${valStr}`;
+  }
+
+  // ─── show me a step ───────────────────────────────────────
+  function showStep() {
+    const hint = suggestNextStep(state);
+    if (!hint) return;
+    setHintMsg(hint.description);
+    setSheepMood('thinking');
+    setTimeout(() => {
+      let newState, opType;
+      switch (hint.type) {
+        case 'expand':
+          newState = expandGroup(state, hint.termId, hint.side);
+          opType   = { type: 'expand' };
+          break;
+        case 'combine':
+          newState = combineTerms(state, hint.id1, hint.id2, hint.side);
+          opType   = { type: 'combine', side: hint.side };
+          break;
+        case 'move':
+          newState = moveTerm(state, hint.termId, hint.fromSide);
+          opType   = { type: 'move', fromSide: hint.fromSide };
+          break;
+        case 'negate':
+          newState = multiplyBothSides(state, -1, 1);
+          opType   = { type: 'negate' };
+          break;
+        case 'multiply':
+          newState = multiplyBothSides(state, hint.num, hint.den);
+          opType   = { type: 'multiply', num: hint.num, den: hint.den };
+          break;
+        default: return;
+      }
+      sounds.expand();
+      push(newState, opType);
+      setTimeout(() => setHintMsg(''), 1800);
+    }, 600); // short pause so the sheep "thinks" visibly
   }
 
   function undo() {
@@ -307,13 +365,19 @@ export default function GameScreen({ level, onWin, onBack }) {
           <span className="level-num">LV {level.id}</span>
         </div>
         <div className="header-right">
+          <button className="pixel-btn btn-hint" onClick={showStep} title="Show me the next step">💡</button>
           <button className="pixel-btn btn-recycle" onClick={recycle} title="New random equation">↺</button>
           <button className="pixel-btn btn-undo" onClick={undo} disabled={step === 0}>UNDO</button>
         </div>
       </div>
 
-      {/* Hint */}
-      <div className="hint-bar">💡 {level.hint}</div>
+      {/* Hint bar — shows static level hint, or auto-hint message */}
+      <div className="hint-bar">
+        {hintMsg ? <span className="hint-active">🐑 {hintMsg}</span> : <>💡 {level.hint}</>}
+      </div>
+
+      {/* Flying sheep mascot */}
+      <SheepMascot mood={sheepMood} />
 
       {/* Equation board */}
       <EquationBoard
