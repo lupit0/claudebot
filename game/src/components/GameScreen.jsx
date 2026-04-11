@@ -25,10 +25,10 @@ function parseFrac(str) {
   return frac(n);
 }
 
-export default function GameScreen({ level, onWin, onBack }) {
-  const [history,  setHistory]  = useState(() => [level.initial()]);
+export default function GameScreen({ level, initialState, onWin, onBack }) {
+  const [history,  setHistory]  = useState(() => [initialState ?? level.initial()]);
   const [step,     setStep]     = useState(0);
-  const [narrates, setNarrates] = useState(() => [equationStr(level.initial())]);
+  const [narrates, setNarrates] = useState(() => [equationStr(initialState ?? level.initial())]);
   const [selected, setSelected] = useState(null);
   const [second,   setSecond]   = useState(null);
   const [mulOpen,  setMulOpen]  = useState(false);

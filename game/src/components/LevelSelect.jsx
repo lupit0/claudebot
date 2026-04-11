@@ -1,13 +1,6 @@
 import { LEVELS, TIERS } from '../utils/levels';
 
 export default function LevelSelect({ completed, onSelect, onReset }) {
-  function handleReset() {
-    if (completed.size === 0) return;
-    if (window.confirm('Reset all progress? This cannot be undone.')) {
-      onReset();
-    }
-  }
-
   return (
     <div className="level-select">
       <div className="game-title">
@@ -21,9 +14,8 @@ export default function LevelSelect({ completed, onSelect, onReset }) {
         </span>
         <button
           className="pixel-btn btn-recycle"
-          onClick={handleReset}
-          disabled={completed.size === 0}
-          title="Reset all progress"
+          onClick={onReset}
+          title="Reset progress and randomise equations"
         >↺ RESET</button>
       </div>
 
