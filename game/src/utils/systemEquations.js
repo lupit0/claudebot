@@ -78,7 +78,8 @@ export function multiplyEqS(eq, mulNum, mulDen) {
 //   - other side has no top-level terms of that variable and no groups containing it
 
 export function detectIsolated(eq) {
-  const nz = ts => ts.filter(t => !isZeroF(t.coeff));
+  // Groups don't have .coeff so exclude them from the zero-filter
+  const nz = ts => ts.filter(t => t.type === 'group' || !isZeroF(t.coeff));
   const hasGroup = ts => ts.some(t => t.type === 'group');
   const hasVar = (ts, vn) => ts.some(t => {
     if (t.type === 'group') return t.inner.some(u => u.varName === vn);

@@ -1,14 +1,15 @@
 import { useState, useRef, useCallback } from 'react';
 import EquationBoard from './EquationBoard';
 import SheepMascot from './SheepMascot';
+import { termMagLabel, frac } from '../utils/fractions';
 import {
   moveTermS, combineTermsS, multiplyEqS, expandGroupS,
   detectIsolated, substituteById,
   checkSystemWin, extractSystemSolution, systemStr, suggestSystemHint,
 } from '../utils/systemEquations';
-import { frac } from '../utils/fractions';
 
-const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','4/3','-1'];
+const DRAG_THRESHOLD = 6;
+const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','-1'];
 const DIVIDE_PRESETS   = ['2','3','4','5','6','8','10'];
 
 function parseFrac(str) {
@@ -27,31 +28,42 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
   const [eq1, setEq1] = useState(() => level.initial().eq1);
   const [eq2, setEq2] = useState(() => level.initial().eq2);
   const [activeEq, setActiveEq] = useState('eq1');
-  // selected: { termId, eqKey:'eq1'|'eq2', side }
-  const [selected, setSelected] = useState(null);
-  // second: { termId, eqKey, side } — for combine
-  const [second, setSecond] = useState(null);
-  const [history, setHistory] = useState([]);  // [{eq1, eq2}]
-  const [steps, setSteps] = useState(0);
-  const [hintMsg, setHintMsg] = useState('');
-  const [sheepMood, setSheepMood] = useState('idle');
-  const [flash, setFlash] = useState('');
-  const [mulOpen, setMulOpen] = useState(false);
+  const [selected, setSelected] = useState(null);   // { termId, eqKey, side }
+  const [second,   setSecond]   = useState(null);   // { termId, eqKey, side }
+  const [history,  setHistory]  = useState([]);
+  const [steps,    setSteps]    = useState(0);
+  const [hintMsg,  setHintMsg]  = useState('');
+  const [sheepMood,setSheepMood]= useState('idle');
+  const [flash,    setFlash]    = useState('');
+  const [dropSide, setDropSide] = useState(null);
+  const [dropEq,   setDropEq]   = useState(null);
+  const [mulOpen,  setMulOpen]  = useState(false);
   const [mulInput, setMulInput] = useState('');
   const [mulError, setMulError] = useState('');
-  const [divOpen, setDivOpen] = useState(false);
+  const [divOpen,  setDivOpen]  = useState(false);
   const [divInput, setDivInput] = useState('');
   const [divError, setDivError] = useState('');
 
-  // Store initial eq strings for win callback
-  const initialEq1Ref = useRef(eq1);
-  const initialEq2Ref = useRef(eq2);
+  const ghostRef   = useRef(null);
+  const equalsRef1 = useRef(null);
+  const equalsRef2 = useRef(null);
+  const dragRef    = useRef(null);
 
-  // Latest refs for callbacks
+  // Capture initial states once for the win callback
+  const initialEq1Ref = useRef(null);
+  const initialEq2Ref = useRef(null);
+  if (!initialEq1Ref.current) {
+    const init = level.initial();
+    initialEq1Ref.current = init.eq1;
+    initialEq2Ref.current = init.eq2;
+  }
+
+  // Always-current snapshot — lets stable callbacks read live state
   const latestRef = useRef({});
   latestRef.current = { eq1, eq2, activeEq, selected, second, steps, history };
 
-  function pushState(newEq1, newEq2) {
+  // ── Core mutation ─────────────────────────────────────────────
+  const pushState = useCallback((newEq1, newEq2) => {
     const cur = latestRef.current;
     setHistory(h => [...h, { eq1: cur.eq1, eq2: cur.eq2 }]);
     setSteps(s => s + 1);
@@ -64,16 +76,15 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     setTimeout(() => setSheepMood('idle'), 700);
     setTimeout(() => setFlash(''), 600);
 
-    // Check win
     if (checkSystemWin(newEq1, newEq2)) {
-      const sol = extractSystemSolution(newEq1, newEq2);
+      const sol      = extractSystemSolution(newEq1, newEq2);
       const startStr = systemStr(initialEq1Ref.current, initialEq2Ref.current);
       setSheepMood('win');
       setTimeout(() => {
         onWin(cur.steps + 1, sol.str, startStr, level.optimalSteps);
       }, 700);
     }
-  }
+  }, [level.optimalSteps, onWin]);
 
   function undo() {
     const cur = latestRef.current;
@@ -87,100 +98,157 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     setSteps(s => Math.max(0, s - 1));
   }
 
-  // ── Term tap handler ──────────────────────────────────────────
-  const handleTermClick = useCallback((e, term, side, eqKey) => {
-    const cur = latestRef.current;
-    const { selected: curSel, second: curSec, eq1: cEq1, eq2: cEq2 } = cur;
+  // ── Drag / tap (stable callback, reads live state via latestRef) ──
+  const handleTermPointerDown = useCallback((e, term, side, eqKey) => {
+    if ((e.button !== 0 && e.pointerType === 'mouse') || !e.isPrimary) return;
 
-    setActiveEq(eqKey);
+    dragRef.current = {
+      termId: term.id, side, eqKey,
+      coeff: term.coeff, type: term.type,
+      varLabel: term.varName ?? (term.isVar ? 'x' : null),
+      startX: e.clientX, startY: e.clientY,
+      isDragging: false,
+    };
 
-    const termId = term.id;
-
-    // Tapping the same term again → deselect
-    if (curSel?.termId === termId) {
-      setSelected(null);
-      setSecond(null);
-      return;
+    const ghost = ghostRef.current;
+    if (ghost) {
+      const vl = term.varName ?? (term.isVar ? 'x' : null);
+      ghost.textContent = term.type === 'group'
+        ? '(group)'
+        : (term.coeff.num < 0 ? '- ' : '+ ') + termMagLabel(term.coeff, vl);
+      ghost.className = `drag-ghost ${(vl || term.type === 'group') ? 'term-var' : 'term-const'}`;
     }
 
-    if (!curSel) {
-      // Nothing selected — select this term
-      setSelected({ termId, eqKey, side });
-      setSecond(null);
-      return;
-    }
-
-    // Something already selected
-    if (curSel.eqKey === eqKey && curSel.side === side) {
-      // Same equation, same side — check for combine (like terms)
-      const eq = eqKey === 'eq1' ? cEq1 : cEq2;
-      const allTerms = [...eq.left, ...eq.right];
-      const primary = allTerms.find(t => t.id === curSel.termId);
-      const target  = allTerms.find(t => t.id === termId);
-      if (primary && target &&
-          primary.type !== 'group' && target.type !== 'group' &&
-          primary.varName === target.varName) {
-        // Like terms → mark as second
-        setSecond({ termId, eqKey, side });
-        return;
+    const onMove = (ev) => {
+      if (!dragRef.current) return;
+      const dx = Math.abs(ev.clientX - dragRef.current.startX);
+      const dy = Math.abs(ev.clientY - dragRef.current.startY);
+      if (!dragRef.current.isDragging && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) {
+        dragRef.current.isDragging = true;
+        if (ghost) ghost.style.display = 'flex';
       }
-    }
+      if (dragRef.current.isDragging && ghost) {
+        ghost.style.left = ev.clientX + 'px';
+        ghost.style.top  = ev.clientY + 'px';
+        const eqRef  = dragRef.current.eqKey === 'eq1' ? equalsRef1 : equalsRef2;
+        const eqRect = eqRef.current?.getBoundingClientRect();
+        if (eqRect) {
+          const cx = eqRect.left + eqRect.width / 2;
+          const ds = dragRef.current.side === 'left'  ? (ev.clientX > cx ? 'right' : null)
+                   : dragRef.current.side === 'right' ? (ev.clientX < cx ? 'left'  : null)
+                   : null;
+          setDropSide(ds);
+          setDropEq(dragRef.current.eqKey);
+        }
+      }
+    };
 
-    // Otherwise switch primary selection
-    setSelected({ termId, eqKey, side });
-    setSecond(null);
-  }, []);
+    const onUp = (ev) => {
+      window.removeEventListener('pointermove',   onMove);
+      window.removeEventListener('pointerup',     onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (ghost) ghost.style.display = 'none';
+      setDropSide(null);
+      setDropEq(null);
+
+      const info = dragRef.current;
+      if (!info) return;
+      dragRef.current = null;
+
+      const cur = latestRef.current;
+
+      if (info.isDragging) {
+        // Check if term crossed the = sign of its equation
+        const eqRef = info.eqKey === 'eq1' ? equalsRef1 : equalsRef2;
+        const eqEl  = eqRef.current;
+        if (!eqEl) return;
+        const rect    = eqEl.getBoundingClientRect();
+        const cx      = rect.left + rect.width / 2;
+        const crossed = (info.side === 'left'  && ev.clientX > cx) ||
+                        (info.side === 'right' && ev.clientX < cx);
+        if (!crossed) return;
+
+        const eq    = info.eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+        const newEq = moveTermS(eq, info.termId, info.side);
+        const [newEq1, newEq2] = info.eqKey === 'eq1'
+          ? [newEq, cur.eq2]
+          : [cur.eq1, newEq];
+        pushState(newEq1, newEq2);
+
+      } else {
+        // Tap: select / set-second / deselect
+        const { termId, side: tapSide, eqKey: tapEqKey } = info;
+        const { selected: curSel, eq1: cEq1, eq2: cEq2 } = cur;
+
+        setActiveEq(tapEqKey);
+
+        if (curSel?.termId === termId) {
+          setSelected(null); setSecond(null); return;
+        }
+        if (!curSel) {
+          setSelected({ termId, eqKey: tapEqKey, side: tapSide });
+          setSecond(null);
+          return;
+        }
+        // Same equation, same side → check for combine
+        if (curSel.eqKey === tapEqKey && curSel.side === tapSide) {
+          const eq  = tapEqKey === 'eq1' ? cEq1 : cEq2;
+          const all = [...eq.left, ...eq.right];
+          const primary = all.find(t => t.id === curSel.termId);
+          const target  = all.find(t => t.id === termId);
+          if (primary && target &&
+              primary.type !== 'group' && target.type !== 'group' &&
+              primary.varName === target.varName) {
+            setSecond({ termId, eqKey: tapEqKey, side: tapSide });
+            return;
+          }
+        }
+        setSelected({ termId, eqKey: tapEqKey, side: tapSide });
+        setSecond(null);
+      }
+    };
+
+    window.addEventListener('pointermove',   onMove);
+    window.addEventListener('pointerup',     onUp);
+    window.addEventListener('pointercancel', onUp);
+  }, [pushState]);
 
   // ── Double-click to expand group ──────────────────────────────
   function handleDoubleClick(termId, side, eqKey) {
-    const cur = latestRef.current;
-    const eq = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+    const cur  = latestRef.current;
+    const eq   = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const term = [...eq.left, ...eq.right].find(t => t.id === termId);
     if (term?.type === 'group') {
       const newEq = expandGroupS(eq, termId, side);
-      const [newEq1, newEq2] = eqKey === 'eq1'
-        ? [newEq, cur.eq2]
-        : [cur.eq1, newEq];
+      const [newEq1, newEq2] = eqKey === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
       pushState(newEq1, newEq2);
     }
   }
 
-  // ── Determine substitution availability ──────────────────────
-  // Which terms in each equation can be substituted?
+  // ── Substitution readiness ────────────────────────────────────
   const iso1 = detectIsolated(eq1);
   const iso2 = detectIsolated(eq2);
 
-  // Compute subst-ready term ids for eq1 (terms whose varName matches what's isolated in eq2)
   const substReadyEq1 = new Set();
   const substReadyEq2 = new Set();
   if (iso2) {
-    const isoVarName = iso2.varName;
     [...eq1.left, ...eq1.right].forEach(t => {
-      if (t.varName === isoVarName && t.type !== 'group') {
-        substReadyEq1.add(t.id);
-      }
+      if (t.varName === iso2.varName && t.type !== 'group') substReadyEq1.add(t.id);
     });
   }
   if (iso1) {
-    const isoVarName = iso1.varName;
     [...eq2.left, ...eq2.right].forEach(t => {
-      if (t.varName === isoVarName && t.type !== 'group') {
-        substReadyEq2.add(t.id);
-      }
+      if (t.varName === iso1.varName && t.type !== 'group') substReadyEq2.add(t.id);
     });
   }
 
-  // ── Action bar logic ──────────────────────────────────────────
-  const getSelectedTerm = () => {
+  // ── Selected term ─────────────────────────────────────────────
+  const selectedTerm = (() => {
     if (!selected) return null;
-    const cur = latestRef.current;
-    const eq = selected.eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+    const eq = selected.eqKey === 'eq1' ? eq1 : eq2;
     return [...eq.left, ...eq.right].find(t => t.id === selected.termId) || null;
-  };
+  })();
 
-  const selectedTerm = getSelectedTerm();
-
-  // Can substitute? The selected term's varName is isolated in the OTHER equation
   const canSubstitute = (() => {
     if (!selected || !selectedTerm || selectedTerm.type === 'group') return false;
     const iso = selected.eqKey === 'eq1' ? iso2 : iso1;
@@ -197,7 +265,7 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     const cur = latestRef.current;
     const iso = selected.eqKey === 'eq1' ? iso2 : iso1;
     if (!iso) return;
-    const eq = selected.eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+    const eq    = selected.eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = substituteById(eq, selected.termId, iso.exprTerms, iso.negated);
     const [newEq1, newEq2] = selected.eqKey === 'eq1'
       ? [newEq, cur.eq2]
@@ -206,26 +274,22 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
   }
 
   function doCombine() {
-    if (!canCombine || !selected || !second) return;
-    const cur = latestRef.current;
+    if (!canCombine) return;
+    const cur   = latestRef.current;
     const eqKey = selected.eqKey;
-    const eq = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+    const eq    = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = combineTermsS(eq, selected.termId, second.termId, selected.side);
-    const [newEq1, newEq2] = eqKey === 'eq1'
-      ? [newEq, cur.eq2]
-      : [cur.eq1, newEq];
+    const [newEq1, newEq2] = eqKey === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
     pushState(newEq1, newEq2);
   }
 
   function doMove() {
     if (!selected || !selectedTerm || canExpand) return;
-    const cur = latestRef.current;
+    const cur   = latestRef.current;
     const eqKey = selected.eqKey;
-    const eq = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
+    const eq    = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = moveTermS(eq, selected.termId, selected.side);
-    const [newEq1, newEq2] = eqKey === 'eq1'
-      ? [newEq, cur.eq2]
-      : [cur.eq1, newEq];
+    const [newEq1, newEq2] = eqKey === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
     pushState(newEq1, newEq2);
   }
 
@@ -234,16 +298,13 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     handleDoubleClick(selected.termId, selected.side, selected.eqKey);
   }
 
-  // ── Multiply / Divide the active equation ────────────────────
   function doMultiply() {
     const f = parseFrac(mulInput);
     if (!f) { setMulError('Enter a number like 2, 1/3, -1'); return; }
-    const cur = latestRef.current;
-    const eq = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
+    const cur   = latestRef.current;
+    const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = multiplyEqS(eq, f.num, f.den);
-    const [newEq1, newEq2] = cur.activeEq === 'eq1'
-      ? [newEq, cur.eq2]
-      : [cur.eq1, newEq];
+    const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
     pushState(newEq1, newEq2);
     setMulOpen(false); setMulInput(''); setMulError('');
   }
@@ -251,23 +312,19 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
   function doDivide() {
     const f = parseFrac(divInput);
     if (!f) { setDivError('Enter a number like 2 or 3'); return; }
-    const cur = latestRef.current;
-    const eq = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
-    const newEq = multiplyEqS(eq, f.den, f.num); // ÷n = ×(1/n)
-    const [newEq1, newEq2] = cur.activeEq === 'eq1'
-      ? [newEq, cur.eq2]
-      : [cur.eq1, newEq];
+    const cur   = latestRef.current;
+    const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
+    const newEq = multiplyEqS(eq, f.den, f.num);
+    const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
     pushState(newEq1, newEq2);
     setDivOpen(false); setDivInput(''); setDivError('');
   }
 
   function changeSign() {
-    const cur = latestRef.current;
-    const eq = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
+    const cur   = latestRef.current;
+    const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = multiplyEqS(eq, -1, 1);
-    const [newEq1, newEq2] = cur.activeEq === 'eq1'
-      ? [newEq, cur.eq2]
-      : [cur.eq1, newEq];
+    const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
     pushState(newEq1, newEq2);
   }
 
@@ -276,59 +333,42 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     const msg = suggestSystemHint(cur.eq1, cur.eq2);
     setHintMsg(msg);
     setSheepMood('thinking');
-    setTimeout(() => {
-      setSheepMood('idle');
-      setTimeout(() => setHintMsg(''), 3000);
-    }, 1000);
+    setTimeout(() => { setSheepMood('idle'); setTimeout(() => setHintMsg(''), 3000); }, 1000);
   }
 
-  // ── Action bar JSX ────────────────────────────────────────────
+  // ── Action bar ────────────────────────────────────────────────
   const actionBar = selected ? (
     <div className="action-buttons system-action-buttons">
       {canSubstitute && (
         <button className="action-btn btn-substitute" onClick={doSubstitute}>
-          SUBSTITUTE {selectedTerm?.varName}
+          SUBSTITUTE {selectedTerm?.varName?.toUpperCase()}
         </button>
       )}
       {canExpand && (
-        <button className="action-btn btn-expand" onClick={doExpand}>
-          EXPAND ( )
-        </button>
+        <button className="action-btn btn-expand" onClick={doExpand}>EXPAND ( )</button>
       )}
       {canCombine && (
-        <button className="action-btn btn-combine" onClick={doCombine}>
-          COMBINE
-        </button>
+        <button className="action-btn btn-combine" onClick={doCombine}>COMBINE</button>
       )}
-      {canMove && !canSubstitute && !canCombine && (
-        <button className="action-btn btn-move" onClick={doMove}>
-          MOVE TERM
-        </button>
+      {canMove && !canSubstitute && (
+        <button className="action-btn btn-move" onClick={doMove}>MOVE TERM</button>
       )}
       <button className="action-btn btn-cancel"
-        onClick={() => { setSelected(null); setSecond(null); }}>
-        ✕
-      </button>
+        onClick={() => { setSelected(null); setSecond(null); }}>✕</button>
     </div>
   ) : null;
 
-  // ── Build per-board selected/second props ─────────────────────
-  const sel1 = selected?.eqKey === 'eq1'
-    ? { id: selected.termId, side: selected.side }
-    : null;
-  const sec1 = second?.eqKey === 'eq1'
-    ? { id: second.termId, side: second.side }
-    : null;
-  const sel2 = selected?.eqKey === 'eq2'
-    ? { id: selected.termId, side: selected.side }
-    : null;
-  const sec2 = second?.eqKey === 'eq2'
-    ? { id: second.termId, side: second.side }
-    : null;
+  // Per-board selection props
+  const sel1 = selected?.eqKey === 'eq1' ? { id: selected.termId, side: selected.side } : null;
+  const sec1 = second?.eqKey   === 'eq1' ? { id: second.termId,   side: second.side   } : null;
+  const sel2 = selected?.eqKey === 'eq2' ? { id: selected.termId, side: selected.side } : null;
+  const sec2 = second?.eqKey   === 'eq2' ? { id: second.termId,   side: second.side   } : null;
 
   return (
     <div className={`system-game-screen ${flash}`}>
-      {/* Header */}
+      {/* Drag ghost — DOM-only, never touched by React during drag */}
+      <div ref={ghostRef} className="drag-ghost" style={{ display: 'none' }} aria-hidden />
+
       <div className="game-header">
         <button className="pixel-btn btn-back" onClick={onBack}>← BACK</button>
         <div className="level-badge">
@@ -341,57 +381,50 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
         </div>
       </div>
 
-      {/* Hint bar */}
       <div className="hint-bar">
         {hintMsg
           ? <span className="hint-active">🐑 {hintMsg}</span>
-          : <>💡 {level.hint}</>
-        }
+          : <>💡 {level.hint}</>}
       </div>
 
-      {/* System boards */}
       <div className="system-boards">
-        {/* Equation 1 */}
         <div
           className={`system-eq-wrapper ${activeEq === 'eq1' ? 'eq-active' : ''}`}
-          onClick={() => setActiveEq('eq1')}
+          onClick={() => { if (!selected) setActiveEq('eq1'); }}
         >
           <div className="eq-label">EQ 1</div>
           <EquationBoard
             state={eq1}
             selected={sel1}
             second={sec1}
-            onPointerDown={(e, term, side) => handleTermClick(e, term, side, 'eq1')}
+            onPointerDown={(e, term, side) => handleTermPointerDown(e, term, side, 'eq1')}
             onDoubleClick={(termId, side) => handleDoubleClick(termId, side, 'eq1')}
+            equalsRef={equalsRef1}
+            dropSide={dropEq === 'eq1' ? dropSide : null}
             substReadyIds={substReadyEq1}
           />
         </div>
 
-        {/* Action bar between the two equations */}
-        {actionBar && (
-          <div className="system-action-bar">
-            {actionBar}
-          </div>
-        )}
+        {actionBar && <div className="system-action-bar">{actionBar}</div>}
 
-        {/* Equation 2 */}
         <div
           className={`system-eq-wrapper ${activeEq === 'eq2' ? 'eq-active' : ''}`}
-          onClick={() => setActiveEq('eq2')}
+          onClick={() => { if (!selected) setActiveEq('eq2'); }}
         >
           <div className="eq-label">EQ 2</div>
           <EquationBoard
             state={eq2}
             selected={sel2}
             second={sec2}
-            onPointerDown={(e, term, side) => handleTermClick(e, term, side, 'eq2')}
+            onPointerDown={(e, term, side) => handleTermPointerDown(e, term, side, 'eq2')}
             onDoubleClick={(termId, side) => handleDoubleClick(termId, side, 'eq2')}
+            equalsRef={equalsRef2}
+            dropSide={dropEq === 'eq2' ? dropSide : null}
             substReadyIds={substReadyEq2}
           />
         </div>
       </div>
 
-      {/* Operation buttons for active equation */}
       <div className="ops-toolbar">
         <div className="active-eq-label">
           Active: <span className="active-eq-name">{activeEq === 'eq1' ? 'EQ 1' : 'EQ 2'}</span>
@@ -404,12 +437,9 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
           onClick={() => { setDivOpen(o => !o); setMulOpen(false); }}>
           ÷ BOTH SIDES
         </button>
-        <button className="pixel-btn btn-sign" onClick={changeSign}>
-          ± SIGN
-        </button>
+        <button className="pixel-btn btn-sign" onClick={changeSign}>± SIGN</button>
       </div>
 
-      {/* Multiply panel */}
       {mulOpen && (
         <div className="mul-input-row">
           <span className="mul-label">Multiply {activeEq === 'eq1' ? 'Eq 1' : 'Eq 2'} both sides by:</span>
@@ -419,14 +449,9 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
             ))}
           </div>
           <div className="mul-entry">
-            <input
-              className="mul-input"
-              type="text"
-              value={mulInput}
+            <input className="mul-input" type="text" value={mulInput}
               onChange={e => { setMulInput(e.target.value); setMulError(''); }}
-              placeholder="e.g. 2 or 1/3"
-              autoFocus
-            />
+              placeholder="e.g. 2 or 1/3" autoFocus />
             <button className="pixel-btn btn-go" onClick={doMultiply}>GO!</button>
             <button className="pixel-btn btn-cancel-mul"
               onClick={() => { setMulOpen(false); setMulError(''); }}>✕</button>
@@ -435,7 +460,6 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
         </div>
       )}
 
-      {/* Divide panel */}
       {divOpen && (
         <div className="mul-input-row div-panel">
           <span className="mul-label">Divide {activeEq === 'eq1' ? 'Eq 1' : 'Eq 2'} both sides by:</span>
@@ -445,14 +469,9 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
             ))}
           </div>
           <div className="mul-entry">
-            <input
-              className="mul-input"
-              type="text"
-              value={divInput}
+            <input className="mul-input" type="text" value={divInput}
               onChange={e => { setDivInput(e.target.value); setDivError(''); }}
-              placeholder="e.g. 3 or 4"
-              autoFocus
-            />
+              placeholder="e.g. 3 or 4" autoFocus />
             <button className="pixel-btn btn-go" onClick={doDivide}>GO!</button>
             <button className="pixel-btn btn-cancel-mul"
               onClick={() => { setDivOpen(false); setDivError(''); }}>✕</button>
@@ -461,7 +480,6 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
         </div>
       )}
 
-      {/* Steps counter */}
       <div className="system-steps-bar">
         <span className="steps-label">STEPS: {steps}</span>
         {level.optimalSteps && (
