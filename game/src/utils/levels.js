@@ -6,7 +6,7 @@ import { makeTerm, makeGroup } from './equations';
 export const LEVELS = [
   // ══════════════ TIER 1: One-step integers ══════════════
   {
-    id: 1, tier: 1, tierName: 'Beginner',
+    id: 1, tier: 1, tierName: 'Beginner', optimalSteps: 2,
     title: 'x + 5 = 12',
     hint: 'Move +5 to the right!',
     initial: () => ({
@@ -15,7 +15,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 2, tier: 1, tierName: 'Beginner',
+    id: 2, tier: 1, tierName: 'Beginner', optimalSteps: 2,
     title: 'x − 4 = 9',
     hint: 'Move −4 to the right!',
     initial: () => ({
@@ -24,7 +24,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 3, tier: 1, tierName: 'Beginner',
+    id: 3, tier: 1, tierName: 'Beginner', optimalSteps: 1,
     title: '3x = 18',
     hint: 'Divide both sides by 3 (multiply by ⅓)',
     initial: () => ({
@@ -33,7 +33,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 4, tier: 1, tierName: 'Beginner',
+    id: 4, tier: 1, tierName: 'Beginner', optimalSteps: 1,
     title: 'x/4 = 3',
     hint: 'Multiply both sides by 4!',
     initial: () => ({
@@ -44,7 +44,7 @@ export const LEVELS = [
 
   // ══════════════ TIER 2: Two-step integers ══════════════
   {
-    id: 5, tier: 2, tierName: 'Explorer',
+    id: 5, tier: 2, tierName: 'Explorer', optimalSteps: 3,
     title: '2x + 3 = 11',
     hint: 'First move +3, then divide by 2',
     initial: () => ({
@@ -53,7 +53,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 6, tier: 2, tierName: 'Explorer',
+    id: 6, tier: 2, tierName: 'Explorer', optimalSteps: 3,
     title: '3x − 5 = 10',
     hint: 'Move −5 first, then divide by 3',
     initial: () => ({
@@ -62,7 +62,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 7, tier: 2, tierName: 'Explorer',
+    id: 7, tier: 2, tierName: 'Explorer', optimalSteps: 3,
     title: '5x − 3 = 22',
     hint: 'Move −3, then divide by 5',
     initial: () => ({
@@ -71,7 +71,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 8, tier: 2, tierName: 'Explorer',
+    id: 8, tier: 2, tierName: 'Explorer', optimalSteps: 3,
     title: '4x − 8 = 0',
     hint: 'Move −8 to the right, then divide by 4',
     initial: () => ({
@@ -82,7 +82,7 @@ export const LEVELS = [
 
   // ══════════════ TIER 3: Variables on both sides ══════════════
   {
-    id: 9, tier: 3, tierName: 'Adventurer',
+    id: 9, tier: 3, tierName: 'Adventurer', optimalSteps: 4,
     title: '2x + 3 = x + 8',
     hint: 'Move the x from the right, then move +3',
     initial: () => ({
@@ -91,7 +91,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 10, tier: 3, tierName: 'Adventurer',
+    id: 10, tier: 3, tierName: 'Adventurer', optimalSteps: 5,
     title: '4x − 2 = 2x + 6',
     hint: 'Get all x on one side first',
     initial: () => ({
@@ -100,7 +100,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 11, tier: 3, tierName: 'Adventurer',
+    id: 11, tier: 3, tierName: 'Adventurer', optimalSteps: 5,
     title: '5x + 1 = 3x + 9',
     hint: 'Move 3x left, then move +1 right',
     initial: () => ({
@@ -109,7 +109,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 12, tier: 3, tierName: 'Adventurer',
+    id: 12, tier: 3, tierName: 'Adventurer', optimalSteps: 4,
     title: '2x − 20 = x + 22',
     hint: 'This is the classic! Move x right, move −20 right',
     initial: () => ({
@@ -120,7 +120,7 @@ export const LEVELS = [
 
   // ══════════════ TIER 4: Fractions ══════════════
   {
-    id: 13, tier: 4, tierName: 'Fraction Fighter',
+    id: 13, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 3,
     title: 'x/2 + 3 = 7',
     hint: 'Move +3 first, then multiply both sides by 2',
     initial: () => ({
@@ -129,7 +129,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 14, tier: 4, tierName: 'Fraction Fighter',
+    id: 14, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 1,
     title: '(2/3)x = 8',
     hint: 'Multiply both sides by 3/2',
     initial: () => ({
@@ -138,7 +138,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 15, tier: 4, tierName: 'Fraction Fighter',
+    id: 15, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 3,
     title: '(3/4)x − 1 = 5',
     hint: 'Move −1, then multiply by 4/3',
     initial: () => ({
@@ -147,7 +147,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 16, tier: 4, tierName: 'Fraction Fighter',
+    id: 16, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 5,
     title: 'x/3 − 2 = x/6 + 1',
     hint: 'Multiply both sides by 6 first!',
     initial: () => ({
@@ -156,7 +156,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 17, tier: 4, tierName: 'Fraction Fighter',
+    id: 17, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 3,
     title: 'x/2 + x/3 = 5',
     hint: 'Multiply both sides by 6, then combine',
     initial: () => ({
@@ -165,7 +165,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 18, tier: 4, tierName: 'Fraction Fighter',
+    id: 18, tier: 4, tierName: 'Fraction Fighter', optimalSteps: 5,
     title: '(3/4)x − 2 = (1/2)x + 1',
     hint: 'Move the x/2 left, move −2 right, then clear fractions',
     initial: () => ({
@@ -176,7 +176,7 @@ export const LEVELS = [
 
   // ══════════════ TIER 5: Parentheses ══════════════
   {
-    id: 19, tier: 5, tierName: 'Master',
+    id: 19, tier: 5, tierName: 'Master', optimalSteps: 4,
     title: '2(x + 3) = 14',
     hint: 'Double-tap the group to expand the parentheses first!',
     initial: () => ({
@@ -185,7 +185,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 20, tier: 5, tierName: 'Master',
+    id: 20, tier: 5, tierName: 'Master', optimalSteps: 6,
     title: '3(x − 2) = x + 6',
     hint: 'Expand first, then get all x on one side',
     initial: () => ({
@@ -194,7 +194,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 21, tier: 5, tierName: 'Master',
+    id: 21, tier: 5, tierName: 'Master', optimalSteps: 7,
     title: '2(x + 1) = 3(x − 2)',
     hint: 'Expand both groups, then collect x on one side',
     initial: () => ({
@@ -203,7 +203,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 22, tier: 5, tierName: 'Master',
+    id: 22, tier: 5, tierName: 'Master', optimalSteps: 4,
     title: '(1/2)(x + 4) = 3',
     hint: 'Expand the group, then solve!',
     initial: () => ({
@@ -212,7 +212,7 @@ export const LEVELS = [
     }),
   },
   {
-    id: 23, tier: 5, tierName: 'Master',
+    id: 23, tier: 5, tierName: 'Master', optimalSteps: 6,
     title: '4(x/3 + 1) = x + 7',
     hint: 'Expand first, then collect x and constants',
     initial: () => ({

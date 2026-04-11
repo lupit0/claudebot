@@ -487,7 +487,8 @@ body::after {
   background: #0a1a0a;
   animation: pop-in 0.4s 0.1s cubic-bezier(0.34,1.56,0.64,1) both;
 }
-.victory-sub  { font-size: 9px; color: #aaa; }
+.victory-sub     { font-size: 9px; color: #aaa; }
+.victory-optimal { font-size: 8px; color: #666; margin-top: 4px; }
 .star-row     { display: flex; gap: 16px; }
 .star-icon    { font-size: 32px; color: #333; transition: color 0.2s, text-shadow 0.2s; text-shadow: 2px 2px 0 #000; }
 .star-icon.lit  { color: #888; }

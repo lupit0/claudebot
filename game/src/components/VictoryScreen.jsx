@@ -16,7 +16,8 @@ export default function VictoryScreen({ level, steps, solution, onNext, onReplay
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  const starRating = steps <= 4 ? 3 : steps <= 7 ? 2 : 1;
+  const opt = level.optimalSteps ?? 4;
+  const starRating = steps <= opt ? 3 : steps <= opt + 2 ? 2 : 1;
 
   return (
     <div className="victory-screen">
@@ -37,6 +38,9 @@ export default function VictoryScreen({ level, steps, solution, onNext, onReplay
           <div className="victory-solution">{solution}</div>
         )}
         <div className="victory-sub">SOLVED IN {steps} STEP{steps !== 1 ? 'S' : ''}!</div>
+        {starRating < 3 && (
+          <div className="victory-optimal">★★★ needs {opt} step{opt !== 1 ? 's' : ''}</div>
+        )}
 
         <div className="star-row">
           {[1, 2, 3].map(s => (
