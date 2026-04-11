@@ -4,7 +4,7 @@ const MESSAGES = [
   'AMAZING!', 'BRILLIANT!', 'PERFECT!', 'STELLAR!', 'FANTASTIC!', 'YOU ROCK!',
 ];
 
-export default function VictoryScreen({ level, steps, solution, onNext, onReplay, onBack }) {
+export default function VictoryScreen({ level, steps, solution, startEq, optimal, onNext, onReplay, onBack }) {
   const [msg] = useState(() => MESSAGES[Math.floor(Math.random() * MESSAGES.length)]);
   const [stars, setStars] = useState(0);
 
@@ -16,7 +16,7 @@ export default function VictoryScreen({ level, steps, solution, onNext, onReplay
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  const opt = level.optimalSteps ?? 4;
+  const opt = optimal ?? level.optimalSteps ?? 4;
   const starRating = steps <= opt ? 3 : steps <= opt + 2 ? 2 : 1;
 
   return (
@@ -33,7 +33,7 @@ export default function VictoryScreen({ level, steps, solution, onNext, onReplay
 
       <div className="victory-content">
         <div className="victory-msg">{msg}</div>
-        <div className="victory-title">{level.title}</div>
+        <div className="victory-title">{startEq || level.title}</div>
         {solution && (
           <div className="victory-solution">{solution}</div>
         )}

@@ -17,7 +17,9 @@ export default function App() {
   const [screen,    setScreen]    = useState('select');
   const [level,     setLevel]     = useState(null);
   const [stepsUsed, setStepsUsed] = useState(0);
-  const [solution,  setSolution]  = useState(null); // e.g. 'x = 42'
+  const [solution,  setSolution]  = useState(null);
+  const [startEq,   setStartEq]   = useState('');
+  const [optimal,   setOptimal]   = useState(1);
   const [completed, setCompleted] = useState(loadCompleted);
   // Per-level equation overrides, populated on reset to give fresh random equations
   const [overrides, setOverrides] = useState({});
@@ -45,9 +47,11 @@ export default function App() {
     setOverrides(next);
   }
 
-  function handleWin(steps, sol) {
+  function handleWin(steps, sol, startEqStr, optSteps) {
     setStepsUsed(steps);
     setSolution(sol);
+    setStartEq(startEqStr || '');
+    setOptimal(optSteps  ?? level?.optimalSteps ?? 4);
     setCompleted(prev => new Set([...prev, level.id]));
     setScreen('victory');
   }
@@ -78,6 +82,8 @@ export default function App() {
           level={level}
           steps={stepsUsed}
           solution={solution}
+          startEq={startEq}
+          optimal={optimal}
           onReplay={() => startLevel(level)}
           onNext={nextLevel ? () => startLevel(nextLevel) : null}
           onBack={() => setScreen('select')}

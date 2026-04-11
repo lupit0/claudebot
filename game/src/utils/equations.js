@@ -187,7 +187,27 @@ export function suggestNextStep(state) {
   return null; // already solved
 }
 
-// Stringify the equation for step history
+// Simulate the solver to count the minimum steps for any given state.
+// Reuses suggestNextStep so it stays in sync with the hint logic.
+export function computeOptimalSteps(initialState) {
+  let s = initialState;
+  let steps = 0;
+  const MAX = 25; // safety cap
+  while (!checkWin(s) && steps < MAX) {
+    const hint = suggestNextStep(s);
+    if (!hint) break;
+    switch (hint.type) {
+      case 'expand':   s = expandGroup(s, hint.termId, hint.side); break;
+      case 'combine':  s = combineTerms(s, hint.id1, hint.id2, hint.side); break;
+      case 'move':     s = moveTerm(s, hint.termId, hint.fromSide); break;
+      case 'negate':   s = multiplyBothSides(s, -1, 1); break;
+      case 'multiply': s = multiplyBothSides(s, hint.num, hint.den); break;
+      default: break;
+    }
+    steps++;
+  }
+  return steps;
+}
 export function equationStr(state) {
   const sideStr = terms => {
     if (terms.length === 0) return '0';

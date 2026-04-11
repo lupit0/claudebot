@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import EquationBoard from './EquationBoard';
 import {
   moveTerm, combineTerms, multiplyBothSides, expandGroup,
-  checkWin, narrate, equationStr, suggestNextStep,
+  checkWin, narrate, equationStr, suggestNextStep, computeOptimalSteps,
 } from '../utils/equations';
 import { frac, termMagLabel } from '../utils/fractions';
 import { sounds } from '../utils/sounds';
@@ -73,10 +73,11 @@ export default function GameScreen({ level, initialState, onWin, onBack }) {
     setTimeout(() => setSheepMood('idle'), 700);
     setTimeout(() => setFlash(''), 600);
     if (checkWin(newState)) {
-      // Extract solution string: find "x = N" or "N = x"
-      const sol = extractSolution(newState);
+      const sol        = extractSolution(newState);
+      const startEqStr = equationStr(cur.history[0]);
+      const optimal    = computeOptimalSteps(cur.history[0]);
       setSheepMood('win');
-      setTimeout(() => onWin(nextStep, sol), 700);
+      setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 700);
     }
   }
 
@@ -218,9 +219,11 @@ export default function GameScreen({ level, initialState, onWin, onBack }) {
         setTimeout(() => setFlash(''), 600);
         sounds.move();
         if (checkWin(newState)) {
-          const sol = extractSolution(newState);
+          const sol        = extractSolution(newState);
+          const startEqStr = equationStr(curHist[0]);
+          const optimal    = computeOptimalSteps(curHist[0]);
           setSheepMood('win');
-          setTimeout(() => onWin(nextStep, sol), 700);
+          setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 700);
         }
 
       } else {
