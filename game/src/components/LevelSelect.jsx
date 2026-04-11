@@ -1,6 +1,7 @@
 import { LEVELS, TIERS } from '../utils/levels';
+import { equationStr } from '../utils/equations';
 
-export default function LevelSelect({ completed, onSelect, onReset }) {
+export default function LevelSelect({ completed, overrides = {}, onSelect, onReset }) {
   return (
     <div className="level-select">
       <div className="game-title">
@@ -29,6 +30,7 @@ export default function LevelSelect({ completed, onSelect, onReset }) {
             {tier.levels.map(lvlId => {
               const lvl  = LEVELS.find(l => l.id === lvlId);
               const done = completed.has(lvlId);
+              const eq   = overrides[lvlId] ? equationStr(overrides[lvlId]) : lvl.title;
               return (
                 <button
                   key={lvlId}
@@ -37,7 +39,7 @@ export default function LevelSelect({ completed, onSelect, onReset }) {
                   style={{ '--tier-color': tier.color }}
                 >
                   <span className="level-num">LV{lvlId}</span>
-                  <span className="level-eq">{lvl.title}</span>
+                  <span className="level-eq">{eq}</span>
                   {done && <span className="done-star">★</span>}
                 </button>
               );

@@ -59,6 +59,7 @@ export default function App() {
       {screen === 'select' && (
         <LevelSelect
           completed={completed}
+          overrides={overrides}
           onSelect={startLevel}
           onReset={resetAll}
         />
