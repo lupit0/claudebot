@@ -216,8 +216,8 @@ export default function EquationBuilder({ onSave, onBack }) {
 
       <div className="builder-hint">
         {side === 'left'
-          ? 'Build left side, then tap = to continue'
-          : 'Build right side, then VALIDATE'}
+          ? 'Tip: sign first, then number — e.g. − 5 x for −5x. Tap = when left side is done.'
+          : 'Tip: + or − sets the sign before you type. Tap VALIDATE when done.'}
       </div>
 
       {/* Numpad */}
