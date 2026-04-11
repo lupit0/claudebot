@@ -68,17 +68,18 @@ export function signLabel(coeff) {
 }
 
 // Unsigned magnitude label (for term inside equation, sign shown separately)
+// isVar can be boolean (legacy) or a string varName like 'x' or 'y'
 export function termMagLabel(coeff, isVar) {
   const n = Math.abs(coeff.num);
   const d = coeff.den;
-  if (!isVar) {
-    if (d === 1) return `${n}`;
-    return `${n}/${d}`;
+  const varLabel = typeof isVar === 'string' ? isVar : (isVar ? 'x' : null);
+  if (!varLabel) {
+    return d === 1 ? `${n}` : `${n}/${d}`;
   }
   if (d === 1) {
-    if (n === 1) return 'x';
-    return `${n}x`;
+    if (n === 1) return varLabel;
+    return `${n}${varLabel}`;
   }
-  if (n === 1) return `x/${d}`;
-  return `(${n}/${d})x`;
+  if (n === 1) return `${varLabel}/${d}`;
+  return `(${n}/${d})${varLabel}`;
 }

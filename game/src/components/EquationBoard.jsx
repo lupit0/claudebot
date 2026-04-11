@@ -9,6 +9,7 @@ export default function EquationBoard({
   equalsRef,         // forwarded ref so GameScreen can measure the = position
   dropSide,          // 'left' | 'right' | null  (highlight during drag)
   actionBar,
+  substReadyIds,     // Set of term ids that can be substituted (system mode)
 }) {
   const { left, right } = state;
 
@@ -16,6 +17,7 @@ export default function EquationBoard({
     if (terms.length === 0) return <span className="eq-zero">0</span>;
     return terms.map(term => {
       const isSel = selected?.id === term.id || second?.id === term.id;
+      const isSubstReady = substReadyIds ? substReadyIds.has(term.id) : false;
       return (
         <TermTile
           key={term.id}
@@ -24,6 +26,7 @@ export default function EquationBoard({
           onPointerDown={onPointerDown}
           onDoubleClick={onDoubleClick}
           side={side}
+          isSubstReady={isSubstReady}
         />
       );
     });

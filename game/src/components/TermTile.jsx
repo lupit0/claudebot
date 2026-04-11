@@ -9,7 +9,7 @@ import { termMagLabel } from '../utils/fractions';
  * Tap/select:  handled via onClick (fired only when no drag occurred)
  * Double-tap:  expand a group term
  */
-export default function TermTile({ term, selected, onPointerDown, onDoubleClick, side }) {
+export default function TermTile({ term, selected, onPointerDown, onDoubleClick, side, isSubstReady }) {
   if (term.type === 'group') {
     return (
       <GroupTile
@@ -22,16 +22,17 @@ export default function TermTile({ term, selected, onPointerDown, onDoubleClick,
     );
   }
 
-  const isVar = term.isVar;
-  const label = termMagLabel(term.coeff, isVar);
+  const varLabel = term.varName ?? (term.isVar ? 'x' : null);
+  const label = termMagLabel(term.coeff, varLabel);
   const isNeg = term.coeff.num < 0;
 
   return (
     <button
       className={[
         'term-tile',
-        isVar    ? 'term-var'      : 'term-const',
-        selected ? 'term-selected' : '',
+        varLabel ? 'term-var'      : 'term-const',
+        selected     ? 'term-selected' : '',
+        isSubstReady ? 'subst-ready'   : '',
       ].filter(Boolean).join(' ')}
       onPointerDown={e => onPointerDown(e, term, side)}
       onDoubleClick={() => onDoubleClick?.(term.id, side)}
@@ -59,7 +60,8 @@ function GroupTile({ group, selected, onPointerDown, onDoubleClick, side }) {
     const s = i === 0
       ? (t.coeff.num < 0 ? '−' : '')
       : (t.coeff.num < 0 ? ' − ' : ' + ');
-    return s + termMagLabel(t.coeff, t.isVar);
+    const vl = t.varName ?? (t.isVar ? 'x' : null);
+    return s + termMagLabel(t.coeff, vl);
   }).join('');
 
   return (

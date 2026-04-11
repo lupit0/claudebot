@@ -771,3 +771,135 @@ body::after {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── System game screen ─────────────────────────────────── */
+.system-game-screen {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+.system-game-screen.correct { animation: flash-correct 0.5s ease; }
+
+.system-boards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 12px;
+}
+
+.system-eq-wrapper {
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.system-eq-wrapper.eq-active {
+  border-color: var(--gold, #ffd700);
+  box-shadow: 0 0 8px rgba(255,215,0,0.2);
+}
+
+.eq-label {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: rgba(255,255,255,0.5);
+  margin-bottom: 6px;
+  letter-spacing: 2px;
+}
+
+/* Substitutable terms glow when partner variable is isolated */
+.term-tile.subst-ready {
+  animation: subst-pulse 1s ease-in-out infinite;
+  box-shadow: 0 0 8px 2px rgba(255, 215, 0, 0.6);
+}
+@keyframes subst-pulse {
+  0%, 100% { box-shadow: 0 0 8px 2px rgba(255,215,0,0.4); }
+  50%       { box-shadow: 0 0 14px 4px rgba(255,215,0,0.9); }
+}
+
+.system-action-bar {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+.system-action-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-substitute {
+  background: #1a3a1a;
+  color: var(--green);
+  border-color: var(--green);
+}
+
+.active-eq-label {
+  font-size: 7px;
+  color: #666;
+  text-align: center;
+  width: 100%;
+  margin-bottom: 4px;
+}
+.active-eq-name { color: var(--yellow); }
+
+.system-steps-bar {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-size: 8px;
+  padding: 4px 12px;
+}
+.steps-label   { color: var(--cyan); }
+.steps-optimal { color: #666; }
+
+/* System level tier colors in LevelSelect */
+.level-btn.system-level-btn { font-size: 7px; }
+
+/* System Equation Builder extras */
+.system-equation-builder .builder-preview {
+  margin-bottom: 8px;
+}
+.system-equation-builder .builder-preview.preview-active {
+  border-color: var(--yellow);
+  box-shadow: 0 0 8px rgba(255,215,0,0.2);
+}
+.eq-label-small {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  color: rgba(255,255,255,0.4);
+  margin-right: 8px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.system-eq-toggle {
+  display: flex;
+  gap: 8px;
+  padding: 0 12px;
+  justify-content: center;
+}
+.btn-eq-active {
+  background: #1a3a1a !important;
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+}
+.btn-eq-inactive {
+  background: var(--panel) !important;
+  border-color: var(--border) !important;
+  color: #666 !important;
+}
+.pad-y {
+  background: #0a2a1a;
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: bold;
+}
+/* Make system button in select toolbar */
+.btn-build-system {
+  background: #1a3a4a !important;
+  border-color: #4ecdc4 !important;
+  color: #4ecdc4 !important;
+}

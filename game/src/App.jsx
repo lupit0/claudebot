@@ -1,11 +1,15 @@
 import { useState, useEffect } from 'react';
-import LevelSelect      from './components/LevelSelect';
-import GameScreen       from './components/GameScreen';
-import VictoryScreen    from './components/VictoryScreen';
-import EquationBuilder  from './components/EquationBuilder';
-import { LEVELS }       from './utils/levels';
+import LevelSelect         from './components/LevelSelect';
+import GameScreen          from './components/GameScreen';
+import SystemGameScreen    from './components/SystemGameScreen';
+import VictoryScreen       from './components/VictoryScreen';
+import EquationBuilder     from './components/EquationBuilder';
+import SystemEquationBuilder from './components/SystemEquationBuilder';
+import { LEVELS }          from './utils/levels';
+import { SYSTEM_LEVELS }   from './utils/systemLevels';
 import { makeTerm, makeGroup } from './utils/equations';
-import { randomEquation } from './utils/random';
+import { makeTermS, makeGroupS } from './utils/systemEquations';
+import { randomEquation }  from './utils/random';
 import './App.css';
 
 function loadCompleted() {
@@ -20,6 +24,13 @@ function rawToTerm(t) {
     return makeGroup(t.mul.num, t.mul.den, t.inner.map(u => makeTerm(u.num, u.den, u.isVar)));
   }
   return makeTerm(t.num, t.den, t.isVar);
+}
+
+function rawToTermS(t) {
+  if (t.type === 'group') {
+    return makeGroupS(t.mul.num, t.mul.den, t.inner.map(u => makeTermS(u.num, u.den, u.varName)));
+  }
+  return makeTermS(t.num, t.den, t.varName);
 }
 
 function loadCustomLevels() {
@@ -54,6 +65,49 @@ function saveCustomToStorage(levels) {
   } catch { /* storage blocked */ }
 }
 
+function loadSystemCustomLevels() {
+  try {
+    const raw = localStorage.getItem('eq-quest-system-custom');
+    if (!raw) return [];
+    return JSON.parse(raw).map(d => ({
+      id: d.id,
+      tier: 0,
+      tierName: 'Custom System',
+      title: d.title,
+      hint: 'Solve the system!',
+      optimalSteps: d.optimalSteps,
+      isCustom: true,
+      isSystem: true,
+      _rawEq1: { left: d.eq1.left, right: d.eq1.right },
+      _rawEq2: { left: d.eq2.left, right: d.eq2.right },
+      initial: () => ({
+        eq1: {
+          left:  d.eq1.left.map(rawToTermS),
+          right: d.eq1.right.map(rawToTermS),
+        },
+        eq2: {
+          left:  d.eq2.left.map(rawToTermS),
+          right: d.eq2.right.map(rawToTermS),
+        },
+      }),
+    }));
+  } catch { return []; }
+}
+
+function saveSystemCustomToStorage(levels) {
+  try {
+    localStorage.setItem('eq-quest-system-custom', JSON.stringify(
+      levels.map(l => ({
+        id: l.id,
+        title: l.title,
+        optimalSteps: l.optimalSteps,
+        eq1: { left: l._rawEq1.left, right: l._rawEq1.right },
+        eq2: { left: l._rawEq2.left, right: l._rawEq2.right },
+      }))
+    ));
+  } catch { /* storage blocked */ }
+}
+
 export default function App() {
   const [screen,    setScreen]    = useState('select');
   const [level,     setLevel]     = useState(null);
@@ -64,6 +118,7 @@ export default function App() {
   const [completed, setCompleted] = useState(loadCompleted);
   const [overrides, setOverrides] = useState({});
   const [customLevels, setCustomLevels] = useState(loadCustomLevels);
+  const [systemCustomLevels, setSystemCustomLevels] = useState(loadSystemCustomLevels);
 
   useEffect(() => {
     try {
@@ -73,7 +128,11 @@ export default function App() {
 
   function startLevel(lvl) {
     setLevel(lvl);
-    setScreen('game');
+    if (lvl.isSystem) {
+      setScreen('system-game');
+    } else {
+      setScreen('game');
+    }
   }
 
   function resetAll() {
@@ -123,10 +182,59 @@ export default function App() {
     saveCustomToStorage(next);
   }
 
-  // Custom levels never have a "next" in the built-in progression
-  const nextLevel = level && !level.isCustom
-    ? LEVELS.find(l => l.id === level.id + 1)
-    : null;
+  function handleSaveSystemCustomLevel({ eq1, eq2, title, optimalSteps }) {
+    const newId = -(Date.now()); // negative unique id
+    const lvl = {
+      id: newId,
+      tier: 0,
+      tierName: 'Custom System',
+      title,
+      hint: 'Solve the system!',
+      optimalSteps,
+      isCustom: true,
+      isSystem: true,
+      _rawEq1: eq1,
+      _rawEq2: eq2,
+      initial: () => ({
+        eq1: {
+          left:  eq1.left.map(rawToTermS),
+          right: eq1.right.map(rawToTermS),
+        },
+        eq2: {
+          left:  eq2.left.map(rawToTermS),
+          right: eq2.right.map(rawToTermS),
+        },
+      }),
+    };
+    const next = [...systemCustomLevels, lvl];
+    setSystemCustomLevels(next);
+    saveSystemCustomToStorage(next);
+    setScreen('select');
+  }
+
+  function deleteSystemCustomLevel(id) {
+    const next = systemCustomLevels.filter(l => l.id !== id);
+    setSystemCustomLevels(next);
+    saveSystemCustomToStorage(next);
+  }
+
+  function handleSystemWin(steps, sol, startEqStr, optSteps) {
+    setStepsUsed(steps);
+    setSolution(sol);
+    setStartEq(startEqStr || '');
+    setOptimal(optSteps ?? level?.optimalSteps ?? 8);
+    setCompleted(prev => new Set([...prev, level.id]));
+    setScreen('victory');
+  }
+
+  // nextLevel: for system levels, look in SYSTEM_LEVELS; for regular, look in LEVELS
+  const nextLevel = (() => {
+    if (!level || level.isCustom) return null;
+    if (level.isSystem) {
+      return SYSTEM_LEVELS.find(l => l.id === level.id + 1) || null;
+    }
+    return LEVELS.find(l => l.id === level.id + 1) || null;
+  })();
 
   return (
     <div className="app">
@@ -139,11 +247,20 @@ export default function App() {
           onReset={resetAll}
           onBuild={() => setScreen('builder')}
           onDeleteCustom={deleteCustomLevel}
+          systemCustomLevels={systemCustomLevels}
+          onBuildSystem={() => setScreen('system-builder')}
+          onDeleteSystemCustom={deleteSystemCustomLevel}
         />
       )}
       {screen === 'builder' && (
         <EquationBuilder
           onSave={handleSaveCustomLevel}
+          onBack={() => setScreen('select')}
+        />
+      )}
+      {screen === 'system-builder' && (
+        <SystemEquationBuilder
+          onSave={handleSaveSystemCustomLevel}
           onBack={() => setScreen('select')}
         />
       )}
@@ -153,6 +270,14 @@ export default function App() {
           level={level}
           initialState={overrides[level.id] || null}
           onWin={handleWin}
+          onBack={() => setScreen('select')}
+        />
+      )}
+      {screen === 'system-game' && level && (
+        <SystemGameScreen
+          key={level.id + '-' + Date.now()}
+          level={level}
+          onWin={handleSystemWin}
           onBack={() => setScreen('select')}
         />
       )}
