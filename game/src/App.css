@@ -343,8 +343,21 @@ body::after {
 .btn-expand  { background: #2a1a5c; color: var(--purple); border-color: var(--purple); }
 .btn-cancel  { background: #333;    color: #aaa;          border-color: #555;          }
 
-/* ─── Multiply Panel ────────────────────────────────────── */
-.multiply-panel { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+/* ─── Ops Toolbar (×, ÷, ± buttons) ────────────────────── */
+.ops-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.btn-multiply { background: #2a1a5c; color: var(--purple); }
+.btn-divide   { background: #1a2a5c; color: var(--cyan);   }
+.btn-sign     { background: #3a1a00; color: var(--orange); }
+/* Active (panel open) state */
+.btn-multiply.active { border-color: var(--purple); box-shadow: 4px 4px 0 var(--purple); }
+.btn-divide.active   { border-color: var(--cyan);   box-shadow: 4px 4px 0 var(--cyan);   }
+
+/* ─── Multiply / Divide input panel ─────────────────────── */
 .mul-input-row {
   display: flex;
   flex-direction: column;
@@ -356,6 +369,12 @@ body::after {
   box-shadow: var(--pixel-shadow);
   padding: 14px;
 }
+.div-panel { border-color: var(--cyan); }
+.div-panel .mul-label  { color: var(--cyan); }
+.div-panel .preset-btn { border-color: var(--cyan); color: var(--cyan); }
+.div-panel .preset-btn:hover { background: #0a1a2a; }
+.div-panel .mul-input  { border-color: var(--cyan); }
+
 .mul-label   { font-size: 9px; color: var(--purple); }
 .mul-presets { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 .preset-btn {

@@ -9,6 +9,7 @@ import { sounds } from '../utils/sounds';
 import { randomEquation } from '../utils/random';
 
 const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','4/3','-1'];
+const DIVIDE_PRESETS   = ['2','3','4','5','6','8','10'];
 const DRAG_THRESHOLD   = 10; // px
 
 function parseFrac(str) {
@@ -32,6 +33,9 @@ export default function GameScreen({ level, onWin, onBack }) {
   const [mulOpen,  setMulOpen]  = useState(false);
   const [mulInput, setMulInput] = useState('');
   const [mulError, setMulError] = useState('');
+  const [divOpen,  setDivOpen]  = useState(false);
+  const [divInput, setDivInput] = useState('');
+  const [divError, setDivError] = useState('');
   const [flash,    setFlash]    = useState('');
   const [dropSide, setDropSide] = useState(null);
 
@@ -219,6 +223,25 @@ export default function GameScreen({ level, onWin, onBack }) {
     setMulOpen(false); setMulInput(''); setMulError('');
   }
 
+  // ─── divide both sides ────────────────────────────────
+  // Dividing by n  =  multiplying by 1/n
+  // Dividing by p/q  =  multiplying by q/p
+  function doDivide() {
+    const f = parseFrac(divInput);
+    if (!f) { setDivError('Enter a number like 2 or 3'); return; }
+    sounds.multiply();
+    push(multiplyBothSides(state, f.den, f.num),   // invert: ÷(p/q) = ×(q/p)
+         { type: 'divide', num: f.num, den: f.den });
+    setDivOpen(false); setDivInput(''); setDivError('');
+  }
+
+  // ─── change sign (× −1 on both sides) ─────────────────
+  function changeSign() {
+    sounds.multiply();
+    push(multiplyBothSides(state, -1, 1),
+         { type: 'negate' });
+  }
+
   // ─── recycle: fresh random equation ───────────────────
   function recycle() {
     const eq = randomEquation(level.tier);
@@ -227,8 +250,13 @@ export default function GameScreen({ level, onWin, onBack }) {
     setHistory([eq]);
     setStep(0);
     setNarrates([equationStr(eq)]);
-    setSelected(null); setSecond(null); setMulOpen(false);
+    setSelected(null); setSecond(null);
+    setMulOpen(false); setDivOpen(false);
   }
+
+  // close the other panel when one opens
+  function openMul() { setMulOpen(true);  setDivOpen(false); }
+  function openDiv() { setDivOpen(true);  setMulOpen(false); }
 
   useEffect(() => {
     const h = e => { if (e.key === 'Enter' && mulOpen) doMultiply(); };
@@ -299,38 +327,70 @@ export default function GameScreen({ level, onWin, onBack }) {
         actionBar={actionBar}
       />
 
-      {/* Multiply both sides */}
-      <div className="multiply-panel">
-        {!mulOpen ? (
-          <button className="pixel-btn btn-multiply" onClick={() => setMulOpen(true)}>
-            × BOTH SIDES
-          </button>
-        ) : (
-          <div className="mul-input-row">
-            <span className="mul-label">Multiply both sides by:</span>
-            <div className="mul-presets">
-              {MULTIPLY_PRESETS.map(p => (
-                <button key={p} className="preset-btn"
-                  onClick={() => setMulInput(p)}>{p}</button>
-              ))}
-            </div>
-            <div className="mul-entry">
-              <input
-                className="mul-input"
-                type="text"
-                value={mulInput}
-                onChange={e => { setMulInput(e.target.value); setMulError(''); }}
-                placeholder="e.g. 2 or 1/3"
-                autoFocus
-              />
-              <button className="pixel-btn btn-go" onClick={doMultiply}>GO!</button>
-              <button className="pixel-btn btn-cancel-mul"
-                onClick={() => { setMulOpen(false); setMulError(''); }}>✕</button>
-            </div>
-            {mulError && <div className="mul-error">{mulError}</div>}
-          </div>
-        )}
+      {/* Operation buttons */}
+      <div className="ops-toolbar">
+        <button className={`pixel-btn btn-multiply ${mulOpen ? 'active' : ''}`} onClick={openMul}>
+          × BOTH SIDES
+        </button>
+        <button className={`pixel-btn btn-divide ${divOpen ? 'active' : ''}`} onClick={openDiv}>
+          ÷ BOTH SIDES
+        </button>
+        <button className="pixel-btn btn-sign" onClick={changeSign}>
+          ± SIGN
+        </button>
       </div>
+
+      {/* Multiply panel */}
+      {mulOpen && (
+        <div className="mul-input-row">
+          <span className="mul-label">Multiply both sides by:</span>
+          <div className="mul-presets">
+            {MULTIPLY_PRESETS.map(p => (
+              <button key={p} className="preset-btn" onClick={() => setMulInput(p)}>{p}</button>
+            ))}
+          </div>
+          <div className="mul-entry">
+            <input
+              className="mul-input"
+              type="text"
+              value={mulInput}
+              onChange={e => { setMulInput(e.target.value); setMulError(''); }}
+              placeholder="e.g. 2 or 1/3"
+              autoFocus
+            />
+            <button className="pixel-btn btn-go" onClick={doMultiply}>GO!</button>
+            <button className="pixel-btn btn-cancel-mul"
+              onClick={() => { setMulOpen(false); setMulError(''); }}>✕</button>
+          </div>
+          {mulError && <div className="mul-error">{mulError}</div>}
+        </div>
+      )}
+
+      {/* Divide panel */}
+      {divOpen && (
+        <div className="mul-input-row div-panel">
+          <span className="mul-label">Divide both sides by:</span>
+          <div className="mul-presets">
+            {DIVIDE_PRESETS.map(p => (
+              <button key={p} className="preset-btn" onClick={() => setDivInput(p)}>{p}</button>
+            ))}
+          </div>
+          <div className="mul-entry">
+            <input
+              className="mul-input"
+              type="text"
+              value={divInput}
+              onChange={e => { setDivInput(e.target.value); setDivError(''); }}
+              placeholder="e.g. 3 or 4"
+              autoFocus
+            />
+            <button className="pixel-btn btn-go" onClick={doDivide}>GO!</button>
+            <button className="pixel-btn btn-cancel-mul"
+              onClick={() => { setDivOpen(false); setDivError(''); }}>✕</button>
+          </div>
+          {divError && <div className="mul-error">{divError}</div>}
+        </div>
+      )}
 
       {/* Step history */}
       <div className="step-history">

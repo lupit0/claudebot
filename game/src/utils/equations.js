@@ -116,6 +116,10 @@ export function narrate(prevState, nextState, op) {
       return `Combined like terms on ${op.side} side`;
     case 'multiply':
       return `Multiplied both sides by ${op.num}${op.den !== 1 ? `/${op.den}` : ''}`;
+    case 'divide':
+      return `Divided both sides by ${op.num}${op.den !== 1 ? `/${op.den}` : ''}`;
+    case 'negate':
+      return 'Changed sign on both sides (× −1)';
     case 'expand':
       return 'Expanded parentheses';
     default:
