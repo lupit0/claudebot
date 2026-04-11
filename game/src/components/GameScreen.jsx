@@ -154,7 +154,7 @@ export default function GameScreen({ level, initialState, onWin, onBack }) {
     if (ghost) {
       ghost.textContent = term.type === 'group'
         ? `(group)`
-        : (term.coeff.num < 0 ? '− ' : '+ ') + termMagLabel(term.coeff, term.isVar);
+        : (term.coeff.num < 0 ? '- ' : '+ ') + termMagLabel(term.coeff, term.isVar);
       ghost.className = `drag-ghost ${(term.isVar || term.type === 'group') ? 'term-var' : 'term-const'}`;
     }
 

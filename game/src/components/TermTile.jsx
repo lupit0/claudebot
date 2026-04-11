@@ -40,7 +40,7 @@ export default function TermTile({ term, selected, onPointerDown, onDoubleClick,
       draggable={false}
     >
       <span className={`term-sign ${isNeg ? 'sign-neg' : 'sign-pos'}`}>
-        {isNeg ? '−' : '+'}
+        {isNeg ? '-' : '+'}
       </span>
       <span className="term-label">{label}</span>
     </button>
@@ -50,7 +50,7 @@ export default function TermTile({ term, selected, onPointerDown, onDoubleClick,
 function GroupTile({ group, selected, onPointerDown, onDoubleClick, side }) {
   const mNum  = Math.abs(group.multiplier.num);
   const mDen  = group.multiplier.den;
-  const mSign = group.multiplier.num < 0 ? '−' : '+';
+  const mSign = group.multiplier.num < 0 ? '-' : '+';
   const mStr  = mDen === 1
     ? (mNum === 1 ? '' : `${mNum}`)
     : `${mNum}/${mDen}`;

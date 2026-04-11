@@ -65,15 +65,16 @@ export function multiplyBothSides(state, num, den) {
 // Expand a parenthesized group into flat terms
 export function expandGroup(state, groupId, side) {
   const terms = state[side];
-  const group = terms.find(t => t.id === groupId && t.type === 'group');
-  if (!group) return state;
+  const idx = terms.findIndex(t => t.id === groupId && t.type === 'group');
+  if (idx === -1) return state;
+  const group = terms[idx];
   const expanded = group.inner.map(inner => ({
     id: uid(),
     coeff: mulF(group.multiplier, inner.coeff),
     isVar: inner.isVar,
   }));
   const rest = terms.filter(t => t.id !== groupId);
-  return { ...state, [side]: [...rest, ...expanded] };
+  return { ...state, [side]: [...rest.slice(0, idx), ...expanded, ...rest.slice(idx)] };
 }
 
 // --- Win detection ---
