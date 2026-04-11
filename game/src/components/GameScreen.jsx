@@ -217,7 +217,11 @@ export default function GameScreen({ level, onWin, onBack }) {
         setFlash('correct');
         setTimeout(() => setFlash(''), 600);
         sounds.move();
-        if (checkWin(newState)) setTimeout(() => onWin(nextStep), 700);
+        if (checkWin(newState)) {
+          const sol = extractSolution(newState);
+          setSheepMood('win');
+          setTimeout(() => onWin(nextStep, sol), 700);
+        }
 
       } else {
         // ── tap: select / set-second / deselect ──────────────
