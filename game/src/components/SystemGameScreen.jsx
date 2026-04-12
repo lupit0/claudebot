@@ -306,8 +306,8 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
   // ── EQ-label drag (elimination / combination) ─────────────────
   const handleEqLabelPointerDown = useCallback((e, eqKey) => {
     if ((e.button !== 0 && e.pointerType === 'mouse') || !e.isPrimary) return;
-    e.stopPropagation();
-    e.preventDefault();
+    e.preventDefault(); // prevent scroll on touch; suppresses click so onClick isn't needed
+    setActiveEq(eqKey); // tapping empty space still activates this equation
 
     const startX = e.clientX, startY = e.clientY;
     let isDragging = false;
@@ -467,13 +467,12 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
         <div
           ref={eqWrapper1Ref}
           className={`system-eq-wrapper ${activeEq === 'eq1' ? 'eq-active' : ''} ${eqDropTarget === 'eq1' ? 'eq-drop-target' : ''}`}
-          onClick={() => { if (!selected) setActiveEq('eq1'); }}
+          onPointerDown={e => {
+            if (e.target.closest('.term-tile')) return; // term tiles handle themselves
+            handleEqLabelPointerDown(e, 'eq1');
+          }}
         >
-          <div
-            className="eq-label eq-label-drag"
-            onPointerDown={e => handleEqLabelPointerDown(e, 'eq1')}
-            title="Drag onto other equation to combine"
-          >EQ 1</div>
+          <div className="eq-label eq-label-drag">EQ 1</div>
           <EquationBoard
             state={eq1}
             selected={sel1}
@@ -508,13 +507,12 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
         <div
           ref={eqWrapper2Ref}
           className={`system-eq-wrapper ${activeEq === 'eq2' ? 'eq-active' : ''} ${eqDropTarget === 'eq2' ? 'eq-drop-target' : ''}`}
-          onClick={() => { if (!selected) setActiveEq('eq2'); }}
+          onPointerDown={e => {
+            if (e.target.closest('.term-tile')) return;
+            handleEqLabelPointerDown(e, 'eq2');
+          }}
         >
-          <div
-            className="eq-label eq-label-drag"
-            onPointerDown={e => handleEqLabelPointerDown(e, 'eq2')}
-            title="Drag onto other equation to combine"
-          >EQ 2</div>
+          <div className="eq-label eq-label-drag">EQ 2</div>
           <EquationBoard
             state={eq2}
             selected={sel2}

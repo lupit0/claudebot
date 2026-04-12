@@ -809,25 +809,29 @@ body::after {
   letter-spacing: 2px;
 }
 
-/* Draggable EQ label */
-.eq-label-drag {
+/* Whole wrapper is draggable — term tiles override with pointer */
+.system-eq-wrapper {
   cursor: grab;
   touch-action: none;
   user-select: none;
-  padding: 4px 8px;
-  border-radius: 4px;
-  transition: background 0.15s, color 0.15s;
+}
+.system-eq-wrapper:active { cursor: grabbing; }
+.system-eq-wrapper .term-tile { cursor: pointer; touch-action: none; }
+
+/* EQ label — subtle handle hint */
+.eq-label-drag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s;
 }
 .eq-label-drag::after {
   content: '⠿';
   font-size: 10px;
   opacity: 0.35;
 }
-.eq-label-drag:hover { background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.8); }
-.eq-label-drag:active { cursor: grabbing; }
 
 /* Drop target highlight */
 .system-eq-wrapper.eq-drop-target {
