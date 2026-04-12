@@ -34,9 +34,19 @@ export default function VictoryScreen({ level, steps, solution, startEq, optimal
 
       <div className="victory-content">
         <div className="victory-msg">{msg}</div>
-        <div className="victory-title">{startEq || level.title}</div>
+        <div className="victory-title">
+          {(startEq || level.title).includes(' | ')
+            ? (startEq || level.title).split(' | ').map((s, i) => <div key={i}>{s}</div>)
+            : (startEq || level.title)
+          }
+        </div>
         {solution && (
-          <div className="victory-solution">{solution}</div>
+          <div className="victory-solution">
+            {solution.includes(', ')
+              ? solution.split(', ').map((s, i) => <div key={i}>{s}</div>)
+              : solution
+            }
+          </div>
         )}
         <div className="victory-sub">SOLVED IN {steps} STEP{steps !== 1 ? 'S' : ''}!</div>
         {starRating < 3 && (
