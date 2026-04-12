@@ -552,8 +552,60 @@ body::after {
   right: 16px;
   z-index: 200;
   pointer-events: none;
-  width: 120px;
-  height: 120px;
+  /* 15 cols × 7px = 105px wide, 14 rows × 7px = 98px tall */
+  width: 105px;
+  height: 98px;
+}
+
+/* Animate the SVG inside the wrapper */
+.sheep-mascot svg { transform-origin: bottom center; }
+
+/* ── Idle: gentle float ── */
+.sheep-idle svg {
+  animation: sheep-float 3s ease-in-out infinite;
+}
+@keyframes sheep-float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  40%      { transform: translateY(-8px) rotate(-2deg); }
+  60%      { transform: translateY(-6px) rotate(2deg); }
+}
+
+/* ── Happy: big bounce + wiggle ── */
+.sheep-happy svg {
+  animation: sheep-bounce 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes sheep-bounce {
+  0%   { transform: translateY(0)     rotate(0deg)   scale(1.0); }
+  30%  { transform: translateY(-32px) rotate(-14deg) scale(1.18); }
+  65%  { transform: translateY(-12px) rotate(10deg)  scale(1.08); }
+  100% { transform: translateY(0)     rotate(0deg)   scale(1.0); }
+}
+
+/* ── Thinking: tilt side to side ── */
+.sheep-thinking svg {
+  animation: sheep-think 0.4s ease-in-out 3;
+}
+@keyframes sheep-think {
+  0%, 100% { transform: rotate(0deg)   translateX(0); }
+  30%      { transform: rotate(-12deg) translateX(-4px); }
+  70%      { transform: rotate( 12deg) translateX( 4px); }
+}
+
+/* ── Win: fly off screen diagonally + spin ── */
+.sheep-win {
+  animation: sheep-win-fly 2s ease-in forwards;
+}
+@keyframes sheep-win-fly {
+  0%   { bottom: 16px; right: 16px; opacity: 1; }
+  20%  { bottom: 80px; right: 50px; opacity: 1; }
+  100% { bottom: 120vh; right: -40vw; opacity: 0; }
+}
+.sheep-win svg {
+  animation: sheep-win-spin 2s ease-in forwards;
+}
+@keyframes sheep-win-spin {
+  0%   { transform: rotate(0deg)    scale(1.0); }
+  100% { transform: rotate(1080deg) scale(2.5); }
 }
 
 /* ─── Victory screen sheep ───────────────────────────────── */
@@ -566,6 +618,14 @@ body::after {
 @keyframes victory-sheep-enter {
   from { transform: translateY(40px) scale(0.6); opacity: 0; }
   to   { transform: translateY(0)    scale(1);   opacity: 1; }
+}
+.victory-sheep-wrap svg {
+  animation: victory-sheep-dance 0.7s ease-in-out infinite alternate;
+  transform-origin: bottom center;
+}
+@keyframes victory-sheep-dance {
+  from { transform: translateY(0)     rotate(-6deg) scale(1.0); }
+  to   { transform: translateY(-18px) rotate( 6deg) scale(1.06); }
 }
 
 /* ─── Equation Builder ──────────────────────────────────── */
