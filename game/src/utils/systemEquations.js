@@ -163,9 +163,12 @@ export function checkSystemWin(eq1, eq2) {
   const iso2 = detectIsolated(eq2);
   if (!iso1 || !iso2) return false;
 
+  // "Fully solved" means: no groups, exactly one constant (or zero)
   const isConstExpr = (terms) => {
+    if (terms.some(t => t.type === 'group')) return false;
     const nz = terms.filter(t => !isZeroF(t.coeff));
-    return nz.every(t => t.type !== 'group' && t.varName === null);
+    if (nz.length === 0) return true; // = 0
+    return nz.length === 1 && nz[0].varName === null;
   };
 
   const vars = new Set([iso1.varName, iso2.varName]);
