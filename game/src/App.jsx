@@ -10,6 +10,8 @@ import { SYSTEM_LEVELS }   from './utils/systemLevels';
 import { makeTerm, makeGroup } from './utils/equations';
 import { makeTermS, makeGroupS } from './utils/systemEquations';
 import { randomEquation }  from './utils/random';
+import { WORD_PROBLEMS }   from './utils/wordProblems';
+import WordBuildScreen     from './components/WordBuildScreen';
 import './App.css';
 
 function loadCompleted() {
@@ -119,12 +121,24 @@ export default function App() {
   const [overrides, setOverrides] = useState({});
   const [customLevels, setCustomLevels] = useState(loadCustomLevels);
   const [systemCustomLevels, setSystemCustomLevels] = useState(loadSystemCustomLevels);
+  const [wordCompleted, setWordCompleted] = useState(() => {
+    try {
+      const raw = localStorage.getItem('eq-quest-word-completed');
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch { return new Set(); }
+  });
 
   useEffect(() => {
     try {
       localStorage.setItem('eq-quest-completed', JSON.stringify([...completed]));
     } catch { /* storage might be blocked */ }
   }, [completed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('eq-quest-word-completed', JSON.stringify([...wordCompleted]));
+    } catch { /* storage might be blocked */ }
+  }, [wordCompleted]);
 
   function startLevel(lvl) {
     setLevel(lvl);
@@ -133,6 +147,16 @@ export default function App() {
     } else {
       setScreen('game');
     }
+  }
+
+  function startWordLevel(problem) {
+    setLevel({
+      ...problem,
+      isWord: true,
+      hint: problem.hint,
+      title: problem.title,
+    });
+    setScreen(problem.equationCount === 2 ? 'system-game' : 'game');
   }
 
   function resetAll() {
@@ -150,7 +174,11 @@ export default function App() {
     setSolution(sol);
     setStartEq(startEqStr || '');
     setOptimal(optSteps ?? level?.optimalSteps ?? 4);
-    setCompleted(prev => new Set([...prev, level.id]));
+    if (level?.isWord) {
+      setWordCompleted(prev => new Set([...prev, level.id]));
+    } else {
+      setCompleted(prev => new Set([...prev, level.id]));
+    }
     setScreen('victory');
   }
 
@@ -223,7 +251,11 @@ export default function App() {
     setSolution(sol);
     setStartEq(startEqStr || '');
     setOptimal(optSteps ?? level?.optimalSteps ?? 8);
-    setCompleted(prev => new Set([...prev, level.id]));
+    if (level?.isWord) {
+      setWordCompleted(prev => new Set([...prev, level.id]));
+    } else {
+      setCompleted(prev => new Set([...prev, level.id]));
+    }
     setScreen('victory');
   }
 
@@ -243,7 +275,10 @@ export default function App() {
           completed={completed}
           overrides={overrides}
           customLevels={customLevels}
+          wordProblems={WORD_PROBLEMS}
+          wordCompleted={wordCompleted}
           onSelect={startLevel}
+          onSelectWord={startWordLevel}
           onReset={resetAll}
           onBuild={() => setScreen('builder')}
           onDeleteCustom={deleteCustomLevel}
@@ -264,11 +299,15 @@ export default function App() {
           onBack={() => setScreen('select')}
         />
       )}
+      {screen === 'word-builder' && (
+        <WordBuildScreen onBack={() => setScreen('select')} />
+      )}
       {screen === 'game' && level && (
         <GameScreen
           key={level.id + '-' + Date.now()}
           level={level}
           initialState={overrides[level.id] || null}
+          wordContext={level?.isWord ? level : null}
           onWin={handleWin}
           onBack={() => setScreen('select')}
         />
@@ -277,6 +316,7 @@ export default function App() {
         <SystemGameScreen
           key={level.id + '-' + Date.now()}
           level={level}
+          wordContext={level?.isWord ? level : null}
           onWin={handleSystemWin}
           onBack={() => setScreen('select')}
         />

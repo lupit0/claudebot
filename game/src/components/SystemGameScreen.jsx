@@ -24,7 +24,7 @@ function parseFrac(str) {
   return frac(n);
 }
 
-export default function SystemGameScreen({ level, onWin, onBack }) {
+export default function SystemGameScreen({ level, onWin, onBack, wordContext }) {
   const [eq1, setEq1] = useState(() => level.initial().eq1);
   const [eq2, setEq2] = useState(() => level.initial().eq2);
   const [activeEq, setActiveEq] = useState('eq1');
@@ -462,6 +462,13 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
           ? <span className="hint-active">🐑 {hintMsg}</span>
           : <>💡 {level.hint}</>}
       </div>
+
+      {wordContext && (
+        <div className="word-context-banner">
+          <span className="word-context-icon">📖</span>
+          <span className="word-context-text">{wordContext.problem}</span>
+        </div>
+      )}
 
       <div className="system-boards">
         <div

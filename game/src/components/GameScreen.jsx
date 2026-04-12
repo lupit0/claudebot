@@ -25,7 +25,7 @@ function parseFrac(str) {
   return frac(n);
 }
 
-export default function GameScreen({ level, initialState, onWin, onBack }) {
+export default function GameScreen({ level, initialState, onWin, onBack, wordContext }) {
   const [history,  setHistory]  = useState(() => [initialState ?? level.initial()]);
   const [step,     setStep]     = useState(0);
   const [narrates, setNarrates] = useState(() => [equationStr(initialState ?? level.initial())]);
@@ -382,6 +382,13 @@ export default function GameScreen({ level, initialState, onWin, onBack }) {
       <div className="hint-bar">
         {hintMsg ? <span className="hint-active">🐑 {hintMsg}</span> : <>💡 {level.hint}</>}
       </div>
+
+      {wordContext && (
+        <div className="word-context-banner">
+          <span className="word-context-icon">📖</span>
+          <span className="word-context-text">{wordContext.problem}</span>
+        </div>
+      )}
 
       {/* Flying sheep mascot */}
       <SheepMascot mood={sheepMood} />
