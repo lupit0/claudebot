@@ -155,6 +155,19 @@ export function substituteById(eq, termId, exprTerms, negated) {
   };
 }
 
+// ── Equation combination (elimination method) ─────────────────
+// sign = 1: target + source; sign = -1: target - source
+// targetEq is modified; sourceEq stays unchanged.
+
+export function addEquations(targetEq, sourceEq, sign) {
+  const signedSource = multiplyEqS(sourceEq, sign, 1);
+  const clonedTarget = multiplyEqS(targetEq, 1, 1);
+  return {
+    left:  [...clonedTarget.left,  ...signedSource.left],
+    right: [...clonedTarget.right, ...signedSource.right],
+  };
+}
+
 // ── Win detection ─────────────────────────────────────────────
 // Both x and y are isolated with only constant expressions
 

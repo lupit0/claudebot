@@ -4,7 +4,7 @@ import SheepMascot from './SheepMascot';
 import { termMagLabel, frac } from '../utils/fractions';
 import {
   moveTermS, combineTermsS, multiplyEqS, expandGroupS,
-  detectIsolated, substituteById,
+  detectIsolated, substituteById, addEquations,
   checkSystemWin, extractSystemSolution, systemStr, suggestSystemHint,
 } from '../utils/systemEquations';
 
@@ -37,17 +37,22 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
   const [flash,    setFlash]    = useState('');
   const [dropSide, setDropSide] = useState(null);
   const [dropEq,   setDropEq]   = useState(null);
-  const [mulOpen,  setMulOpen]  = useState(false);
-  const [mulInput, setMulInput] = useState('');
-  const [mulError, setMulError] = useState('');
-  const [divOpen,  setDivOpen]  = useState(false);
-  const [divInput, setDivInput] = useState('');
-  const [divError, setDivError] = useState('');
+  const [mulOpen,      setMulOpen]      = useState(false);
+  const [mulInput,     setMulInput]     = useState('');
+  const [mulError,     setMulError]     = useState('');
+  const [divOpen,      setDivOpen]      = useState(false);
+  const [divInput,     setDivInput]     = useState('');
+  const [divError,     setDivError]     = useState('');
+  const [eqDropTarget, setEqDropTarget] = useState(null);  // 'eq1' | 'eq2' | null
+  const [combinePopup, setCombinePopup] = useState(null);  // { source, target } | null
 
-  const ghostRef   = useRef(null);
-  const equalsRef1 = useRef(null);
-  const equalsRef2 = useRef(null);
-  const dragRef    = useRef(null);
+  const ghostRef     = useRef(null);
+  const equalsRef1   = useRef(null);
+  const equalsRef2   = useRef(null);
+  const dragRef      = useRef(null);
+  const eqGhostRef   = useRef(null);
+  const eqWrapper1Ref = useRef(null);
+  const eqWrapper2Ref = useRef(null);
 
   // Capture initial states once for the win callback
   const initialEq1Ref = useRef(null);
@@ -298,6 +303,75 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
     handleDoubleClick(selected.termId, selected.side, selected.eqKey);
   }
 
+  // ── EQ-label drag (elimination / combination) ─────────────────
+  const handleEqLabelPointerDown = useCallback((e, eqKey) => {
+    if ((e.button !== 0 && e.pointerType === 'mouse') || !e.isPrimary) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    const startX = e.clientX, startY = e.clientY;
+    let isDragging = false;
+    let overTarget = null;
+
+    const ghost = eqGhostRef.current;
+    const otherKey = eqKey === 'eq1' ? 'eq2' : 'eq1';
+    const otherRef = eqKey === 'eq1' ? eqWrapper2Ref : eqWrapper1Ref;
+
+    if (ghost) {
+      ghost.textContent = eqKey === 'eq1' ? 'EQ 1' : 'EQ 2';
+      ghost.style.left = e.clientX + 'px';
+      ghost.style.top  = e.clientY + 'px';
+    }
+
+    const onMove = (ev) => {
+      const dx = Math.abs(ev.clientX - startX);
+      const dy = Math.abs(ev.clientY - startY);
+      if (!isDragging && (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD)) {
+        isDragging = true;
+        if (ghost) ghost.style.display = 'flex';
+      }
+      if (!isDragging) return;
+      if (ghost) {
+        ghost.style.left = ev.clientX + 'px';
+        ghost.style.top  = ev.clientY + 'px';
+      }
+      const rect = otherRef.current?.getBoundingClientRect();
+      const isOver = rect
+        && ev.clientX >= rect.left - 24 && ev.clientX <= rect.right  + 24
+        && ev.clientY >= rect.top  - 24 && ev.clientY <= rect.bottom + 24;
+      const next = isOver ? otherKey : null;
+      if (next !== overTarget) { overTarget = next; setEqDropTarget(next); }
+    };
+
+    const onUp = () => {
+      window.removeEventListener('pointermove',   onMove);
+      window.removeEventListener('pointerup',     onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (ghost) ghost.style.display = 'none';
+      setEqDropTarget(null);
+      if (isDragging && overTarget) {
+        setCombinePopup({ source: eqKey, target: overTarget });
+      }
+    };
+
+    window.addEventListener('pointermove',   onMove);
+    window.addEventListener('pointerup',     onUp);
+    window.addEventListener('pointercancel', onUp);
+  }, []);
+
+  function doAddEquations(sign) {
+    const cur = latestRef.current;
+    if (!combinePopup) return;
+    setCombinePopup(null);
+    const targetEq = combinePopup.target === 'eq1' ? cur.eq1 : cur.eq2;
+    const sourceEq = combinePopup.source === 'eq1' ? cur.eq1 : cur.eq2;
+    const newEq = addEquations(targetEq, sourceEq, sign);
+    const [newEq1, newEq2] = combinePopup.target === 'eq1'
+      ? [newEq, cur.eq2]
+      : [cur.eq1, newEq];
+    pushState(newEq1, newEq2);
+  }
+
   function doMultiply() {
     const f = parseFrac(mulInput);
     if (!f) { setMulError('Enter a number like 2, 1/3, -1'); return; }
@@ -366,8 +440,10 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
 
   return (
     <div className={`system-game-screen ${flash}`}>
-      {/* Drag ghost — DOM-only, never touched by React during drag */}
+      {/* Term drag ghost */}
       <div ref={ghostRef} className="drag-ghost" style={{ display: 'none' }} aria-hidden />
+      {/* EQ-label drag ghost */}
+      <div ref={eqGhostRef} className="eq-drag-ghost" style={{ display: 'none' }} aria-hidden />
 
       <div className="game-header">
         <button className="pixel-btn btn-back" onClick={onBack}>← BACK</button>
@@ -389,10 +465,15 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
 
       <div className="system-boards">
         <div
-          className={`system-eq-wrapper ${activeEq === 'eq1' ? 'eq-active' : ''}`}
+          ref={eqWrapper1Ref}
+          className={`system-eq-wrapper ${activeEq === 'eq1' ? 'eq-active' : ''} ${eqDropTarget === 'eq1' ? 'eq-drop-target' : ''}`}
           onClick={() => { if (!selected) setActiveEq('eq1'); }}
         >
-          <div className="eq-label">EQ 1</div>
+          <div
+            className="eq-label eq-label-drag"
+            onPointerDown={e => handleEqLabelPointerDown(e, 'eq1')}
+            title="Drag onto other equation to combine"
+          >EQ 1</div>
           <EquationBoard
             state={eq1}
             selected={sel1}
@@ -407,11 +488,33 @@ export default function SystemGameScreen({ level, onWin, onBack }) {
 
         {actionBar && <div className="system-action-bar">{actionBar}</div>}
 
+        {combinePopup && (
+          <div className="eq-combine-popup">
+            <div className="eq-combine-label">
+              EQ {combinePopup.target === 'eq1' ? '1' : '2'} &nbsp;±&nbsp; EQ {combinePopup.source === 'eq1' ? '1' : '2'}
+            </div>
+            <div className="eq-combine-btns">
+              <button className="pixel-btn eq-sign-btn" onClick={() => doAddEquations(1)}>
+                + EQ {combinePopup.source === 'eq1' ? '1' : '2'}
+              </button>
+              <button className="pixel-btn eq-sign-btn" onClick={() => doAddEquations(-1)}>
+                - EQ {combinePopup.source === 'eq1' ? '1' : '2'}
+              </button>
+              <button className="pixel-btn eq-sign-cancel" onClick={() => setCombinePopup(null)}>✕</button>
+            </div>
+          </div>
+        )}
+
         <div
-          className={`system-eq-wrapper ${activeEq === 'eq2' ? 'eq-active' : ''}`}
+          ref={eqWrapper2Ref}
+          className={`system-eq-wrapper ${activeEq === 'eq2' ? 'eq-active' : ''} ${eqDropTarget === 'eq2' ? 'eq-drop-target' : ''}`}
           onClick={() => { if (!selected) setActiveEq('eq2'); }}
         >
-          <div className="eq-label">EQ 2</div>
+          <div
+            className="eq-label eq-label-drag"
+            onPointerDown={e => handleEqLabelPointerDown(e, 'eq2')}
+            title="Drag onto other equation to combine"
+          >EQ 2</div>
           <EquationBoard
             state={eq2}
             selected={sel2}
