@@ -1,202 +1,405 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import SheepMascot from './SheepMascot';
+import { frac } from '../utils/fractions';
 
-const makeTerm = (num, den = 1, isVar = false) => ({
-  type: 'term',
-  num,
-  den,
-  isVar,
-});
-const makeGroup = (mulNum, mulDen, inner) => ({
-  type: 'group',
-  mul: { num: mulNum, den: mulDen },
-  inner,
-});
+// ─── Evaluation helpers ──────────────────────────────────────
 
-function cloneBuilder(b) {
-  return JSON.parse(JSON.stringify(b));
+function evalTerm(t, sol) {
+  if (t.type === 'group') {
+    const mul = t.mul.num / t.mul.den;
+    const inner = t.inner.reduce((s, u) => s + evalTerm(u, sol), 0);
+    return mul * inner;
+  }
+  const coef = t.num / t.den;
+  if (t.varName === 'x') return coef * (sol.x ?? 0);
+  if (t.varName === 'y') return coef * (sol.y ?? 0);
+  return coef;
 }
 
-function builderToStringSide(side) {
-  if (!side.length) return '0';
-  return side.map((t, i) => {
-    const sign = t.num < 0 ? '-' : (i > 0 ? '+' : '');
-    const abs = Math.abs(t.num);
-    if (t.type === 'group') {
-      const mul = `${t.mul.den === 1 ? t.mul.num : `${t.mul.num}/${t.mul.den}`}`;
-      const inside = t.inner.map((u, j) => {
-        const s2 = u.num < 0 ? '-' : (j > 0 ? '+' : '');
-        const a2 = Math.abs(u.num);
-        const core = u.isVar || u.varName ? (a2 === 1 ? 'x' : `${a2}x`) : `${a2}`;
-        return `${s2}${core}`;
-      }).join('');
-      return `${sign}${mul}(${inside})`;
+function evalSide(terms, sol) {
+  return terms.reduce((s, t) => s + evalTerm(t, sol), 0);
+}
+
+// ─── Display helpers ─────────────────────────────────────────
+
+function termLabel(t, index) {
+  if (t.type === 'group') {
+    const mulNeg = t.mul.num < 0;
+    const sign   = index === 0 ? (mulNeg ? '−' : '') : (mulNeg ? ' − ' : ' + ');
+    const absN   = Math.abs(t.mul.num);
+    const mulStr = (absN === 1 && t.mul.den === 1)
+      ? '' : (t.mul.den === 1 ? String(absN) : `${absN}/${t.mul.den}`);
+    const inner  = t.inner.map((u, j) => termLabel(u, j)).join('');
+    return `${sign}${mulStr}(${inner})`;
+  }
+  const neg  = t.num < 0;
+  const sign = index === 0 ? (neg ? '−' : '') : (neg ? ' − ' : ' + ');
+  const abs  = Math.abs(t.num);
+  const coef = t.den === 1 ? String(abs) : `${abs}/${t.den}`;
+  if (t.varName) return sign + (abs === 1 && t.den === 1 ? t.varName : `${coef}${t.varName}`);
+  return sign + coef;
+}
+
+// ─── Parse pending input ─────────────────────────────────────
+
+function parsePending(numStr, denStr, negative) {
+  const n = Number(numStr || '1');
+  const d = Number(denStr || '1');
+  if (!numStr && !denStr) return frac(negative ? -1 : 1, 1);
+  if (isNaN(n) || isNaN(d) || d === 0 || n === 0) return null;
+  return frac(negative ? -n : n, d);
+}
+
+// ─── Builder hook ─────────────────────────────────────────────
+// Each instance maintains its own independent builder state.
+
+function useBuilderState() {
+  const [left,       setLeft]       = useState([]);
+  const [right,      setRight]      = useState([]);
+  const [side,       setSide]       = useState('left');
+  const [num,        setNum]        = useState('');
+  const [den,        setDen]        = useState('');
+  const [inDen,      setInDen]      = useState(false);
+  const [neg,        setNeg]        = useState(false);
+  const [inGroup,    setInGroup]    = useState(false);
+  const [groupMul,   setGroupMul]   = useState(null);
+  const [groupInner, setGroupInner] = useState([]);
+
+  const resetInput = () => { setNum(''); setDen(''); setInDen(false); setNeg(false); };
+
+  function addToActive(term) {
+    if (inGroup) setGroupInner(p => [...p, term]);
+    else if (side === 'left') setLeft(p => [...p, term]);
+    else setRight(p => [...p, term]);
+  }
+
+  function commitConst() {
+    if (num === '' && !inDen) return;
+    const f = parsePending(num, inDen ? den : '', neg);
+    if (!f) return;
+    addToActive({ num: f.num, den: f.den, varName: null });
+    resetInput();
+  }
+
+  function pressDigit(d) {
+    if (inDen) { if (den.length < 3) setDen(p => p + d); }
+    else       { if (num.length < 4) setNum(p => p + d); }
+  }
+
+  function pressSlash() { if (num !== '') setInDen(true); }
+
+  function pressVar(v) {
+    const f = parsePending(num, inDen ? den : '', neg);
+    if (!f) return;
+    addToActive({ num: f.num, den: f.den, varName: v });
+    resetInput();
+  }
+
+  function pressPlus()  { commitConst(); setNeg(false); }
+  function pressMinus() {
+    if (num === '' && !inDen) { setNeg(true); return; }
+    commitConst(); setNeg(true);
+  }
+
+  function pressOpenParen() {
+    if (inGroup) return;
+    const f = parsePending(num, inDen ? den : '', neg);
+    setGroupMul(f ? { num: f.num, den: f.den } : { num: 1, den: 1 });
+    setGroupInner([]);
+    setInGroup(true);
+    resetInput();
+  }
+
+  function pressCloseParen() {
+    if (!inGroup) return;
+    commitConst();
+    setGroupInner(inner => {
+      if (inner.length === 0) { setInGroup(false); setGroupMul(null); return []; }
+      const group = { type: 'group', mul: groupMul, inner };
+      if (side === 'left') setLeft(p => [...p, group]);
+      else                 setRight(p => [...p, group]);
+      setInGroup(false);
+      setGroupMul(null);
+      resetInput();
+      return [];
+    });
+  }
+
+  function pressEquals() {
+    if (side === 'right' || inGroup) return;
+    commitConst();
+    setSide('right'); setNeg(false);
+  }
+
+  function pressBackspace() {
+    if (inDen && den.length > 0)  { setDen(p => p.slice(0, -1)); return; }
+    if (inDen)                     { setInDen(false); setDen(''); return; }
+    if (num.length > 0)            { setNum(p => p.slice(0, -1)); return; }
+    if (inGroup) {
+      if (groupInner.length > 0) { setGroupInner(p => p.slice(0, -1)); return; }
+      setInGroup(false); setGroupMul(null); return;
     }
-    const core = t.isVar || t.varName ? (abs === 1 ? 'x' : `${abs}x`) : `${abs}`;
-    return `${sign}${core}`;
-  }).join(' ');
+    if (side === 'right' && right.length === 0) { setSide('left'); return; }
+    if (side === 'left') setLeft(p => p.slice(0, -1));
+    else                 setRight(p => p.slice(0, -1));
+    setNeg(false);
+  }
+
+  function pressClear() {
+    setLeft([]); setRight([]); setSide('left');
+    resetInput();
+    setInGroup(false); setGroupMul(null); setGroupInner([]);
+  }
+
+  // Returns finalised sides (committing any pending constant)
+  function getFinalisedSides() {
+    let fl = [...left], fr = [...right];
+    const pf = parsePending(num, inDen ? den : '', neg);
+    if (pf && num !== '') {
+      const t = { num: pf.num, den: pf.den, varName: null };
+      if (side === 'left') fl = [...fl, t]; else fr = [...fr, t];
+    }
+    return { left: fl, right: fr };
+  }
+
+  const inputDisplay = () => {
+    const sign = neg ? '−' : '+';
+    const n = num || (inDen ? '?' : '');
+    const fracStr = inDen ? `${n}/${den || '?'}` : n;
+    return `${sign} ${fracStr}`;
+  };
+
+  function renderSide(terms, thisSide) {
+    return (
+      <div className={`builder-side ${side === thisSide ? 'side-active' : ''}`}>
+        {terms.length === 0 && side !== thisSide && !inGroup && (
+          <span className="side-empty">?</span>
+        )}
+        {terms.map((t, i) => (
+          <span key={i} className={`btm ${t.type === 'group' ? 'btm-group' : t.varName ? 'btm-var' : 'btm-const'}`}>
+            {termLabel(t, i)}
+          </span>
+        ))}
+        {side === thisSide && (
+          inGroup ? (
+            <span className="btm btm-group">
+              {groupMul && (Math.abs(groupMul.num) !== 1 || groupMul.den !== 1)
+                ? (groupMul.num < 0 ? '−' : terms.length > 0 ? '+' : '')
+                  + (groupMul.den === 1 ? Math.abs(groupMul.num) : `${Math.abs(groupMul.num)}/${groupMul.den}`)
+                : (groupMul?.num < 0 ? '−' : terms.length > 0 ? '+' : '')
+              }{'('}
+              {groupInner.map((u, j) => termLabel(u, j)).join('')}
+              <span className="btm-cursor">{inputDisplay()}▌</span>
+              {')'}
+            </span>
+          ) : (
+            <span className="btm-cursor">{inputDisplay()}▌</span>
+          )
+        )}
+      </div>
+    );
+  }
+
+  return {
+    left, right, side, num, inDen, neg, inGroup, groupMul, groupInner,
+    pressDigit, pressSlash, pressVar, pressPlus, pressMinus,
+    pressOpenParen, pressCloseParen, pressEquals, pressBackspace, pressClear,
+    getFinalisedSides, renderSide,
+    canEquals:     side === 'left' && !inGroup,
+    canOpenParen:  !inGroup,
+    canCloseParen: inGroup,
+  };
 }
+
+// ─── Main component ───────────────────────────────────────────
 
 export default function WordBuildScreen({ problem, onBuilt, onBack }) {
-  const isSystem = problem?.equationCount === 2;
-  const [activeEq, setActiveEq] = useState(1);
-  const [b1, setB1] = useState({ left: [], right: [] });
-  const [b2, setB2] = useState({ left: [], right: [] });
-  const [side, setSide] = useState('left');
-  const [sheepMood, setSheepMood] = useState('thinking');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [input, setInput] = useState({ sign: 1, num: '', den: '', inDen: false, isVar: false, asGroup: false });
+  const isSystem = problem.equationCount === 2;
 
-  const current = isSystem ? (activeEq === 1 ? b1 : b2) : b1;
-  const setCurrent = isSystem ? (activeEq === 1 ? setB1 : setB2) : setB1;
+  const [activeEq,   setActiveEq]   = useState(1);
+  const [sheepMood,  setSheepMood]  = useState('thinking');
+  const [error,      setError]      = useState('');
+  const [success,    setSuccess]    = useState('');
 
-  const resetInput = () => setInput({ sign: 1, num: '', den: '', inDen: false, isVar: false, asGroup: false });
+  // Two independent builder instances (b2 only used for system problems)
+  const b1 = useBuilderState();
+  const b2 = useBuilderState();
 
-  const pressDigit = d => setInput(s => {
-    const n = { ...s };
-    if (n.inDen) {
-      if (n.den.length < 3) n.den += d;
-    } else {
-      if (n.num.length < 3) n.num += d;
+  // Route all numpad interactions to the active builder
+  const active = (isSystem && activeEq === 2) ? b2 : b1;
+
+  // ── Validation and submission ────────────────────────────
+  function check() {
+    setError(''); setSuccess('');
+
+    const s1 = b1.getFinalisedSides();
+    if (!s1.left.length || !s1.right.length) {
+      setError('Build the equation on both sides of =');
+      return;
     }
-    return n;
-  });
 
-  const pressSlash = () => setInput(s => ({ ...s, inDen: true }));
-  const toggleVar = () => setInput(s => ({ ...s, isVar: !s.isVar }));
-  const toggleSign = () => setInput(s => ({ ...s, sign: s.sign * -1 }));
-  const clearInput = () => resetInput();
+    const sol = problem.solution;
 
-  const addTerm = useCallback(() => {
-    setError(''); setSuccess('');
-    const num = Number(input.num || '0');
-    const den = Number(input.den || '1');
-    if (!num || !den) { setError('Enter a valid number first'); return; }
-    const term = makeTerm(input.sign * num, den, input.isVar);
-    const next = cloneBuilder(current);
-    next[side].push(term);
-    setCurrent(next);
-    setSheepMood('happy');
-    setTimeout(() => setSheepMood('thinking'), 500);
-    resetInput();
-  }, [input, current, side, setCurrent]);
+    // Validate eq1 at known solution
+    const lhs1 = evalSide(s1.left, sol);
+    const rhs1 = evalSide(s1.right, sol);
+    if (Math.abs(lhs1 - rhs1) > 0.001) {
+      setSheepMood('thinking');
+      setError("That equation doesn't fit the answer — check your equation and try again.");
+      return;
+    }
 
-  const addGroup = useCallback(() => {
-    setError(''); setSuccess('');
-    const num = Number(input.num || '0');
-    const den = Number(input.den || '1');
-    if (!num || !den) { setError('Enter group multiplier first'); return; }
-    const group = makeGroup(input.sign * num, den, [makeTerm(1, 1, true), makeTerm(1, 1, false)]);
-    const next = cloneBuilder(current);
-    next[side].push(group);
-    setCurrent(next);
-    setSheepMood('happy');
-    setTimeout(() => setSheepMood('thinking'), 500);
-    resetInput();
-  }, [input, current, side, setCurrent]);
+    // Constraining check: equation must NOT also hold at tweaked values
+    const tw = { x: sol.x + 1, y: sol.y != null ? sol.y + 1 : 1 };
+    const tl1 = evalSide(s1.left, tw);
+    const tr1 = evalSide(s1.right, tw);
+    if (Math.abs(tl1 - tr1) < 0.001) {
+      setError('Equation is always true — make it more specific! (e.g. write x + 5 = 12, not 0 = 0)');
+      return;
+    }
 
-  const backspace = () => {
-    setInput(s => {
-      const n = { ...s };
-      if (n.inDen && n.den) n.den = n.den.slice(0, -1);
-      else if (n.inDen && !n.den) n.inDen = false;
-      else n.num = n.num.slice(0, -1);
-      return n;
-    });
-  };
+    if (isSystem) {
+      const s2 = b2.getFinalisedSides();
+      if (!s2.left.length || !s2.right.length) {
+        setError('Build equation 2 on both sides of = (use the EQ 2 tab)');
+        return;
+      }
 
-  const undo = () => {
-    const next = cloneBuilder(current);
-    next[side].pop();
-    setCurrent(next);
-  };
+      const lhs2 = evalSide(s2.left, sol);
+      const rhs2 = evalSide(s2.right, sol);
+      if (Math.abs(lhs2 - rhs2) > 0.001) {
+        setError("Equation 2 doesn't fit the answer — check and try again.");
+        return;
+      }
 
-  const check = () => {
-    setError('');
-    if (!b1.left.length || !b1.right.length) { setError('Build equation 1 on both sides'); return; }
-    if (isSystem && (!b2.left.length || !b2.right.length)) { setError('Build equation 2 on both sides'); return; }
-    setSuccess('Looks good. Opening solver…');
-    setTimeout(() => onBuilt(b1, isSystem ? b2 : null), 500);
-  };
+      const tl2 = evalSide(s2.left, tw);
+      const tr2 = evalSide(s2.right, tw);
+      if (Math.abs(tl1 - tr1) < 0.001 && Math.abs(tl2 - tr2) < 0.001) {
+        setError('Both equations are too general — at least one must constrain the unknowns.');
+        return;
+      }
 
-  const renderBuilder = (b, label='') => (
-    <div className="builder-preview word-builder-preview">
-      {label && <div className="word-eq-label">{label}</div>}
-      <div className={`builder-side ${side === 'left' ? 'side-active' : ''}`} onClick={() => setSide('left')}>
-        <span className="side-empty">{builderToStringSide(b.left)}</span>
-      </div>
-      <div className="builder-eq eq-done">=</div>
-      <div className={`builder-side ${side === 'right' ? 'side-active' : ''}`} onClick={() => setSide('right')}>
-        <span className="side-empty">{builderToStringSide(b.right)}</span>
-      </div>
-    </div>
-  );
+      setSheepMood('win');
+      setSuccess('Both equations are correct! Now solve the system...');
+      setTimeout(() => onBuilt(s1, s2), 1400);
+      return;
+    }
 
-  const pad = (
-    <div className="builder-pad">
-      <div className="pad-row">
-        {['7','8','9'].map(d => <button key={d} className="pad-btn" onClick={() => pressDigit(d)}>{d}</button>)}
-        <button className="pad-btn pad-op" onClick={toggleSign}>±</button>
-      </div>
-      <div className="pad-row">
-        {['4','5','6'].map(d => <button key={d} className="pad-btn" onClick={() => pressDigit(d)}>{d}</button>)}
-        <button className="pad-btn pad-op" onClick={pressSlash}>/</button>
-      </div>
-      <div className="pad-row">
-        {['1','2','3'].map(d => <button key={d} className="pad-btn" onClick={() => pressDigit(d)}>{d}</button>)}
-        <button className={`pad-btn pad-op ${input.isVar ? 'active' : ''}`} onClick={toggleVar}>x</button>
-      </div>
-      <div className="pad-row">
-        <button className="pad-btn" onClick={() => pressDigit('0')}>0</button>
-        <button className="pad-btn pad-action" onClick={addTerm}>ADD TERM</button>
-        <button className="pad-btn pad-action" onClick={addGroup}>ADD GROUP</button>
-      </div>
-      <div className="pad-row">
-        <button className="pad-btn pad-op" onClick={backspace}>⌫</button>
-        <button className="pad-btn pad-op" onClick={clearInput}>CLEAR</button>
-        <button className="pad-btn pad-op" onClick={undo}>UNDO</button>
-      </div>
-    </div>
-  );
+    setSheepMood('win');
+    setSuccess('Correct equation! Now solve it...');
+    setTimeout(() => onBuilt(s1, null), 1400);
+  }
+
+  // ── Render ───────────────────────────────────────────────
+  const eqLeft  = activeEq === 2 ? b2.left  : b1.left;
+  const eqRight = activeEq === 2 ? b2.right : b1.right;
 
   return (
     <div className="equation-builder word-build-screen">
+
       <div className="game-header">
         <button className="pixel-btn btn-back" onClick={onBack}>← BACK</button>
         <div className="level-badge">
           <span className="tier-name">WORD QUEST</span>
-          <span className="level-num">LV {problem.id}</span>
+          <span className="level-num">W{problem.id - 100}</span>
         </div>
         <div style={{ width: 86 }} />
       </div>
 
+      {/* Problem card */}
       <div className="word-problem-card">
-        <div className="word-problem-icon">📖</div>
         <div className="word-problem-text">{problem.problem}</div>
         <div className="word-problem-hint">💡 {problem.hint}</div>
       </div>
 
+      {/* Equation-tabs for system problems */}
       {isSystem && (
         <div className="word-eq-tabs">
-          <button className={`word-eq-tab ${activeEq === 1 ? 'active' : ''}`} onClick={() => setActiveEq(1)}>EQ 1</button>
-          <button className={`word-eq-tab ${activeEq === 2 ? 'active' : ''}`} onClick={() => setActiveEq(2)}>EQ 2</button>
+          <button
+            className={`word-eq-tab ${activeEq === 1 ? 'active' : ''}`}
+            onClick={() => setActiveEq(1)}
+          >EQ 1</button>
+          <button
+            className={`word-eq-tab ${activeEq === 2 ? 'active' : ''}`}
+            onClick={() => setActiveEq(2)}
+          >EQ 2</button>
         </div>
       )}
 
-      <div className="word-builder-section">
-        {isSystem && activeEq === 1 && renderBuilder(b1, 'EQ 1')}
-        {isSystem && activeEq === 2 && renderBuilder(b2, 'EQ 2')}
-        {!isSystem && renderBuilder(b1, '')}
+      {/* Equation display */}
+      <div className="builder-preview">
+        {active.renderSide(eqLeft, 'left')}
+        <div
+          className={`builder-eq ${active.side === 'right' ? 'eq-done' : ''}`}
+          onClick={active.canEquals ? active.pressEquals : undefined}
+          style={{ cursor: active.canEquals ? 'pointer' : 'default', opacity: active.canEquals ? 1 : 0.4 }}
+        >=</div>
+        {active.renderSide(eqRight, 'right')}
       </div>
 
-      {pad}
+      {/* Summary strip for system — shows both equations at a glance */}
+      {isSystem && (
+        <div className="word-system-summary">
+          <span style={{ opacity: activeEq === 1 ? 1 : 0.5 }}>
+            EQ1: {b1.left.map((t,i)=>termLabel(t,i)).join('') || '?'} = {b1.right.map((t,i)=>termLabel(t,i)).join('') || '?'}
+          </span>
+          <span style={{ opacity: activeEq === 2 ? 1 : 0.5 }}>
+            EQ2: {b2.left.map((t,i)=>termLabel(t,i)).join('') || '?'} = {b2.right.map((t,i)=>termLabel(t,i)).join('') || '?'}
+          </span>
+        </div>
+      )}
 
-      {error && <div className="builder-status status-err">{error}</div>}
+      {/* Builder hint */}
+      <div className="builder-hint">
+        {active.inGroup
+          ? 'Inside brackets — add terms, then press ) to close'
+          : active.side === 'left'
+            ? 'Type a number then press x (or y). Press = when left side is done.'
+            : 'Build the right side. Press CHECK when done.'}
+      </div>
+
+      {/* Numpad */}
+      <div className="builder-pad">
+        <div className="pad-row">
+          <button className="pad-btn" onClick={() => active.pressDigit('7')}>7</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('8')}>8</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('9')}>9</button>
+          <button className="pad-btn pad-plus"  onClick={active.pressPlus}>+</button>
+          <button className="pad-btn pad-minus" onClick={active.pressMinus}>−</button>
+        </div>
+        <div className="pad-row">
+          <button className="pad-btn" onClick={() => active.pressDigit('4')}>4</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('5')}>5</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('6')}>6</button>
+          <button className="pad-btn pad-frac"  onClick={active.pressSlash} disabled={active.num === ''}>/</button>
+          <button className="pad-btn pad-back"  onClick={active.pressBackspace}>⌫</button>
+        </div>
+        <div className="pad-row">
+          <button className="pad-btn" onClick={() => active.pressDigit('1')}>1</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('2')}>2</button>
+          <button className="pad-btn" onClick={() => active.pressDigit('3')}>3</button>
+          <button className="pad-btn pad-eq"    onClick={active.pressEquals}     disabled={!active.canEquals}>=</button>
+          <button className="pad-btn pad-clr"   onClick={active.pressClear}>CLR</button>
+        </div>
+        <div className="pad-row">
+          <button className="pad-btn" onClick={() => active.pressDigit('0')}>0</button>
+          <button className="pad-btn pad-paren" onClick={active.pressOpenParen}  disabled={!active.canOpenParen}>(</button>
+          <button className="pad-btn pad-paren" onClick={active.pressCloseParen} disabled={!active.canCloseParen}>)</button>
+          <button className="pad-btn pad-x"     onClick={() => active.pressVar('x')}>x</button>
+          {isSystem
+            ? <button className="pad-btn pad-y" onClick={() => active.pressVar('y')}>y</button>
+            : <div />
+          }
+        </div>
+      </div>
+
+      {error   && <div className="builder-status status-err">{error}</div>}
       {success && <div className="builder-status status-ok">✓ {success}</div>}
 
       <div className="builder-actions">
-        <button className="pixel-btn btn-validate" onClick={check}>CHECK EQUATION{isSystem ? 'S' : ''}</button>
+        <button className="pixel-btn btn-validate" onClick={check}>
+          CHECK EQUATION{isSystem ? 'S' : ''}
+        </button>
       </div>
 
       <SheepMascot mood={sheepMood} />

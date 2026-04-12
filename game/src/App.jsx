@@ -23,16 +23,21 @@ function loadCompleted() {
 
 function rawToTerm(t) {
   if (t.type === 'group') {
-    return makeGroup(t.mul.num, t.mul.den, t.inner.map(u => makeTerm(u.num, u.den, u.isVar)));
+    return makeGroup(t.mul.num, t.mul.den,
+      t.inner.map(u => makeTerm(u.num, u.den, u.isVar || u.varName === 'x')));
   }
-  return makeTerm(t.num, t.den, t.isVar);
+  return makeTerm(t.num, t.den, t.isVar || t.varName === 'x');
 }
 
 function rawToTermS(t) {
   if (t.type === 'group') {
-    return makeGroupS(t.mul.num, t.mul.den, t.inner.map(u => makeTermS(u.num, u.den, u.varName)));
+    return makeGroupS(t.mul.num, t.mul.den, t.inner.map(u => {
+      const vn = u.varName !== undefined ? u.varName : (u.isVar ? 'x' : null);
+      return makeTermS(u.num, u.den, vn);
+    }));
   }
-  return makeTermS(t.num, t.den, t.varName);
+  const varName = t.varName !== undefined ? t.varName : (t.isVar ? 'x' : null);
+  return makeTermS(t.num, t.den, varName);
 }
 
 function loadCustomLevels() {
@@ -121,6 +126,7 @@ export default function App() {
   const [overrides, setOverrides] = useState({});
   const [customLevels, setCustomLevels] = useState(loadCustomLevels);
   const [systemCustomLevels, setSystemCustomLevels] = useState(loadSystemCustomLevels);
+  const [wordProblem,   setWordProblem]   = useState(null);
   const [wordCompleted, setWordCompleted] = useState(() => {
     try {
       const raw = localStorage.getItem('eq-quest-word-completed');
@@ -150,13 +156,39 @@ export default function App() {
   }
 
   function startWordLevel(problem) {
-    setLevel({
-      ...problem,
-      isWord: true,
-      hint: problem.hint,
-      title: problem.title,
-    });
-    setScreen(problem.equationCount === 2 ? 'system-game' : 'game');
+    setWordProblem(problem);
+    setScreen('word-build');
+  }
+
+  function handleWordBuilt(s1, s2) {
+    const prob = wordProblem;
+    if (s2) {
+      // System word problem
+      const lvl = {
+        id: prob.id, tier: prob.tier, tierName: prob.tierName,
+        title: prob.title, hint: prob.hint, optimalSteps: prob.optimalSteps,
+        isWord: true, isSystem: true,
+        initial: () => ({
+          eq1: { left: s1.left.map(rawToTermS), right: s1.right.map(rawToTermS) },
+          eq2: { left: s2.left.map(rawToTermS), right: s2.right.map(rawToTermS) },
+        }),
+      };
+      setLevel(lvl);
+      setScreen('system-game');
+    } else {
+      // Single-variable word problem
+      const lvl = {
+        id: prob.id, tier: prob.tier, tierName: prob.tierName,
+        title: prob.title, hint: prob.hint, optimalSteps: prob.optimalSteps,
+        isWord: true,
+        initial: () => ({
+          left:  s1.left.map(rawToTerm),
+          right: s1.right.map(rawToTerm),
+        }),
+      };
+      setLevel(lvl);
+      setScreen('game');
+    }
   }
 
   function resetAll() {
@@ -299,8 +331,12 @@ export default function App() {
           onBack={() => setScreen('select')}
         />
       )}
-      {screen === 'word-builder' && (
-        <WordBuildScreen onBack={() => setScreen('select')} />
+      {screen === 'word-build' && wordProblem && (
+        <WordBuildScreen
+          problem={wordProblem}
+          onBuilt={handleWordBuilt}
+          onBack={() => setScreen('select')}
+        />
       )}
       {screen === 'game' && level && (
         <GameScreen

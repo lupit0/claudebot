@@ -998,3 +998,113 @@ body::after {
   border-color: #4ecdc4 !important;
   color: #4ecdc4 !important;
 }
+
+/* ─── Select Tabs ────────────────────────────────────────── */
+.select-tabs {
+  display: flex;
+  margin-bottom: 0;
+  border-bottom: 3px solid var(--border);
+}
+.select-tab {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 10px 14px;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -3px;
+  transition: color 0.1s, border-color 0.1s;
+  flex: 1;
+  text-align: center;
+}
+.select-tab:hover { color: var(--bright); }
+.select-tab.active {
+  color: var(--yellow);
+  border-bottom-color: var(--yellow);
+}
+
+/* ─── Word Problem Card ──────────────────────────────────── */
+.word-problem-card {
+  background: #080c22;
+  border: 3px solid #2a3060;
+  padding: 16px;
+  margin: 0 0 4px;
+  line-height: 1.8;
+}
+.word-problem-text {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  color: var(--bright);
+  line-height: 2.2;
+  margin-bottom: 12px;
+}
+.word-problem-hint {
+  font-size: 7px;
+  color: var(--cyan);
+  line-height: 1.9;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+/* ─── Word Equation Tabs ─────────────────────────────────── */
+.word-eq-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 0 4px;
+}
+.word-eq-tab {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 8px 20px;
+  background: var(--panel);
+  border: 3px solid var(--border);
+  color: #666;
+  cursor: pointer;
+  transition: border-color 0.1s, color 0.1s;
+}
+.word-eq-tab.active {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+/* ─── Word system summary strip ──────────────────────────── */
+.word-system-summary {
+  display: flex;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 7px;
+  color: #888;
+  flex-wrap: wrap;
+}
+
+/* ─── Word Context Banner (shown during solve phase) ─────── */
+.word-context-banner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  background: #080c22;
+  border: 2px solid #2a3060;
+  font-size: 7px;
+  color: var(--cyan);
+  line-height: 1.9;
+  margin-bottom: 4px;
+}
+.word-context-icon { flex-shrink: 0; font-size: 14px; }
+.word-context-text { flex: 1; }
+
+/* ─── Word level button ──────────────────────────────────── */
+.word-level-btn .level-num { min-width: 36px; }
+
+/* ─── Parenthesis pad buttons (missing from original) ───── */
+.pad-paren {
+  background: #1a1a2a;
+  border-color: #6655aa;
+  color: #cc99ff;
+  font-size: 16px;
+}
+
+/* ─── Word Build Screen overrides ────────────────────────── */
+.word-build-screen .builder-pad { margin-top: 4px; }
