@@ -378,3 +378,159 @@ export function suggestSystemHint(eq1, eq2) {
 
   return 'Try isolating one variable in either equation';
 }
+
+// ── Optimal-step simulator ────────────────────────────────────
+// Mirrors computeOptimalSteps() in equations.js but for 2-variable systems.
+
+function netVarCoeff(eq, varName) {
+  let s = 0;
+  eq.left.forEach(t  => { if (t.type !== 'group' && t.varName === varName) s += t.coeff.num / t.coeff.den; });
+  eq.right.forEach(t => { if (t.type !== 'group' && t.varName === varName) s -= t.coeff.num / t.coeff.den; });
+  return s;
+}
+
+function suggestSingleEqAction(eq, eqKey) {
+  const nz = ts => ts.filter(t => !isZeroF(t.coeff));
+  const nzL    = nz(eq.left.filter(t => t.type !== 'group'));
+  const nzR    = nz(eq.right.filter(t => t.type !== 'group'));
+  const lVars  = nzL.filter(t => t.varName !== null);
+  const rVars  = nzR.filter(t => t.varName !== null);
+  const lConst = nzL.filter(t => t.varName === null);
+
+  if (lVars.length > 0 && rVars.length > 0)
+    return { eqKey, type: 'move', termId: rVars[0].id, side: 'right' };
+
+  if (lVars.length === 0 && rVars.length > 0) {
+    if (lConst.length > 0) return { eqKey, type: 'move', termId: lConst[0].id, side: 'left' };
+    return { eqKey, type: 'move', termId: rVars[0].id, side: 'right' };
+  }
+
+  const uniqueVars = new Set(lVars.map(t => t.varName));
+  if (uniqueVars.size > 1) return null;
+  if (lConst.length > 0) return { eqKey, type: 'move', termId: lConst[0].id, side: 'left' };
+  if (lVars.length === 0) return null;
+
+  const vt = lVars[0];
+  if (vt.coeff.num < 0) return { eqKey, type: 'negate' };
+  if (vt.coeff.num !== vt.coeff.den) return { eqKey, type: 'multiply', mulNum: vt.coeff.den, mulDen: vt.coeff.num };
+  return null;
+}
+
+function suggestSystemAction(eq1, eq2) {
+  const nz = ts => ts.filter(t => t.type === 'group' || !isZeroF(t.coeff));
+  const isConst = ts => {
+    const nzTs = ts.filter(t => !isZeroF(t.coeff));
+    return nzTs.length <= 1 && nzTs.every(t => t.varName === null && t.type !== 'group');
+  };
+
+  // 1. Expand groups first
+  for (const [eq, eqKey] of [[eq1, 'eq1'], [eq2, 'eq2']]) {
+    for (const side of ['left', 'right']) {
+      const g = eq[side].find(t => t.type === 'group');
+      if (g) return { eqKey, type: 'expand', termId: g.id, side };
+    }
+  }
+
+  // 2. Combine like terms
+  const findCombine = eq => {
+    for (const side of ['left', 'right']) {
+      const terms = nz(eq[side]).filter(t => t.type !== 'group');
+      for (let i = 0; i < terms.length; i++)
+        for (let j = i + 1; j < terms.length; j++)
+          if (terms[i].varName === terms[j].varName)
+            return { id1: terms[i].id, id2: terms[j].id, side };
+    }
+    return null;
+  };
+  const cc1 = findCombine(eq1); if (cc1) return { eqKey: 'eq1', type: 'combine', ...cc1 };
+  const cc2 = findCombine(eq2); if (cc2) return { eqKey: 'eq2', type: 'combine', ...cc2 };
+
+  // 3. Isolation
+  const iso1 = detectIsolated(eq1);
+  const iso2 = detectIsolated(eq2);
+  if (iso1 && isConst(iso1.exprTerms) && iso2 && isConst(iso2.exprTerms)) return null;
+
+  // 4. Numerically solved → substitute into other
+  if (iso1 && isConst(iso1.exprTerms)) {
+    const t = [...eq2.left, ...eq2.right].find(t => t.varName === iso1.varName && t.type !== 'group');
+    if (t) return { type: 'substitute', targetEq: 'eq2', termId: t.id };
+    return suggestSingleEqAction(eq2, 'eq2');
+  }
+  if (iso2 && isConst(iso2.exprTerms)) {
+    const t = [...eq1.left, ...eq1.right].find(t => t.varName === iso2.varName && t.type !== 'group');
+    if (t) return { type: 'substitute', targetEq: 'eq1', termId: t.id };
+    return suggestSingleEqAction(eq1, 'eq1');
+  }
+
+  // 5. Expr-isolated → substitute
+  if (iso1) {
+    const t = [...eq2.left, ...eq2.right].find(t => t.varName === iso1.varName && t.type !== 'group');
+    if (t) return { type: 'substitute', targetEq: 'eq2', termId: t.id };
+  }
+  if (iso2) {
+    const t = [...eq1.left, ...eq1.right].find(t => t.varName === iso2.varName && t.type !== 'group');
+    if (t) return { type: 'substitute', targetEq: 'eq1', termId: t.id };
+  }
+
+  // 6. Single-equation steps
+  const a1 = suggestSingleEqAction(eq1, 'eq1'); if (a1) return a1;
+  const a2 = suggestSingleEqAction(eq2, 'eq2'); if (a2) return a2;
+
+  // 7. Elimination (try sign=1 first, then -1, for each variable)
+  const elVars = new Set();
+  [...eq1.left, ...eq1.right, ...eq2.left, ...eq2.right]
+    .forEach(t => { if (!t.type && t.varName) elVars.add(t.varName); });
+  for (const sign of [1, -1]) {
+    for (const v of elVars) {
+      const nc1 = netVarCoeff(eq1, v);
+      const nc2 = netVarCoeff(eq2, v);
+      if (Math.abs(nc2 + sign * nc1) < 0.001 && Math.abs(nc1) > 0.001)
+        return { type: 'addEquations', targetEq: 'eq2', sign };
+    }
+  }
+  return { type: 'addEquations', targetEq: 'eq2', sign: 1 };
+}
+
+export function computeSystemOptimalSteps(eq1Initial, eq2Initial) {
+  const cloneEq = eq => ({ left: eq.left.map(cloneTermS), right: eq.right.map(cloneTermS) });
+  let eq1 = cloneEq(eq1Initial);
+  let eq2 = cloneEq(eq2Initial);
+  let steps = 0;
+  const MAX = 40;
+
+  while (!checkSystemWin(eq1, eq2) && steps < MAX) {
+    const action = suggestSystemAction(eq1, eq2);
+    if (!action) break;
+
+    const isEq1 = action.eqKey === 'eq1';
+    if (action.type === 'expand') {
+      if (isEq1) eq1 = expandGroupS(eq1, action.termId, action.side);
+      else       eq2 = expandGroupS(eq2, action.termId, action.side);
+    } else if (action.type === 'combine') {
+      if (isEq1) eq1 = combineTermsS(eq1, action.id1, action.id2, action.side);
+      else       eq2 = combineTermsS(eq2, action.id1, action.id2, action.side);
+    } else if (action.type === 'move') {
+      if (isEq1) eq1 = moveTermS(eq1, action.termId, action.side);
+      else       eq2 = moveTermS(eq2, action.termId, action.side);
+    } else if (action.type === 'negate') {
+      if (isEq1) eq1 = multiplyEqS(eq1, -1, 1);
+      else       eq2 = multiplyEqS(eq2, -1, 1);
+    } else if (action.type === 'multiply') {
+      if (isEq1) eq1 = multiplyEqS(eq1, action.mulNum, action.mulDen);
+      else       eq2 = multiplyEqS(eq2, action.mulNum, action.mulDen);
+    } else if (action.type === 'substitute') {
+      const isoEq = action.targetEq === 'eq2' ? eq1 : eq2;
+      const iso   = detectIsolated(isoEq);
+      if (!iso) break;
+      if (action.targetEq === 'eq2') eq2 = substituteById(eq2, action.termId, iso.exprTerms, iso.negated);
+      else                           eq1 = substituteById(eq1, action.termId, iso.exprTerms, iso.negated);
+    } else if (action.type === 'addEquations') {
+      const target = action.targetEq === 'eq1' ? eq1 : eq2;
+      const source = action.targetEq === 'eq1' ? eq2 : eq1;
+      const newEq  = addEquations(target, source, action.sign);
+      if (action.targetEq === 'eq1') eq1 = newEq; else eq2 = newEq;
+    }
+    steps++;
+  }
+  return steps;
+}

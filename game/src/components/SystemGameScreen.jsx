@@ -6,7 +6,9 @@ import {
   moveTermS, combineTermsS, multiplyEqS, expandGroupS,
   detectIsolated, substituteById, addEquations,
   checkSystemWin, extractSystemSolution, systemStr, suggestSystemHint,
+  computeSystemOptimalSteps,
 } from '../utils/systemEquations';
+import { sounds } from '../utils/sounds';
 
 const DRAG_THRESHOLD = 6;
 const MULTIPLY_PRESETS = ['2','3','4','5','6','1/2','1/3','1/4','2/3','3/2','3/4','-1'];
@@ -27,6 +29,10 @@ function parseFrac(str) {
 export default function SystemGameScreen({ level, onWin, onBack, wordContext }) {
   const [eq1, setEq1] = useState(() => level.initial().eq1);
   const [eq2, setEq2] = useState(() => level.initial().eq2);
+  const [computedOptimal] = useState(() => {
+    const init = level.initial();
+    return computeSystemOptimalSteps(init.eq1, init.eq2);
+  });
   const [activeEq, setActiveEq] = useState('eq1');
   const [selected, setSelected] = useState(null);   // { termId, eqKey, side }
   const [second,   setSecond]   = useState(null);   // { termId, eqKey, side }
@@ -85,11 +91,12 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
       const sol      = extractSystemSolution(newEq1, newEq2);
       const startStr = systemStr(initialEq1Ref.current, initialEq2Ref.current);
       setSheepMood('win');
+      sounds.win();
       setTimeout(() => {
-        onWin(cur.steps + 1, sol.str, startStr, level.optimalSteps);
+        onWin(cur.steps + 1, sol.str, startStr, computedOptimal);
       }, 700);
     }
-  }, [level.optimalSteps, onWin]);
+  }, [computedOptimal, onWin]);
 
   function undo() {
     const cur = latestRef.current;
@@ -178,6 +185,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
         const [newEq1, newEq2] = info.eqKey === 'eq1'
           ? [newEq, cur.eq2]
           : [cur.eq1, newEq];
+        sounds.move();
         pushState(newEq1, newEq2);
 
       } else {
@@ -191,6 +199,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
           setSelected(null); setSecond(null); return;
         }
         if (!curSel) {
+          sounds.select();
           setSelected({ termId, eqKey: tapEqKey, side: tapSide });
           setSecond(null);
           return;
@@ -204,10 +213,12 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
           if (primary && target &&
               primary.type !== 'group' && target.type !== 'group' &&
               primary.varName === target.varName) {
+            sounds.select();
             setSecond({ termId, eqKey: tapEqKey, side: tapSide });
             return;
           }
         }
+        sounds.select();
         setSelected({ termId, eqKey: tapEqKey, side: tapSide });
         setSecond(null);
       }
@@ -275,6 +286,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const [newEq1, newEq2] = selected.eqKey === 'eq1'
       ? [newEq, cur.eq2]
       : [cur.eq1, newEq];
+    sounds.expand();
     pushState(newEq1, newEq2);
   }
 
@@ -285,6 +297,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const eq    = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = combineTermsS(eq, selected.termId, second.termId, selected.side);
     const [newEq1, newEq2] = eqKey === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
+    sounds.combine();
     pushState(newEq1, newEq2);
   }
 
@@ -295,11 +308,13 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const eq    = eqKey === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = moveTermS(eq, selected.termId, selected.side);
     const [newEq1, newEq2] = eqKey === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
+    sounds.move();
     pushState(newEq1, newEq2);
   }
 
   function doExpand() {
     if (!selected || !canExpand) return;
+    sounds.expand();
     handleDoubleClick(selected.termId, selected.side, selected.eqKey);
   }
 
@@ -369,6 +384,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const [newEq1, newEq2] = combinePopup.target === 'eq1'
       ? [newEq, cur.eq2]
       : [cur.eq1, newEq];
+    sounds.combine();
     pushState(newEq1, newEq2);
   }
 
@@ -379,6 +395,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = multiplyEqS(eq, f.num, f.den);
     const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
+    sounds.multiply();
     pushState(newEq1, newEq2);
     setMulOpen(false); setMulInput(''); setMulError('');
   }
@@ -390,6 +407,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = multiplyEqS(eq, f.den, f.num);
     const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
+    sounds.multiply();
     pushState(newEq1, newEq2);
     setDivOpen(false); setDivInput(''); setDivError('');
   }
@@ -399,6 +417,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const eq    = cur.activeEq === 'eq1' ? cur.eq1 : cur.eq2;
     const newEq = multiplyEqS(eq, -1, 1);
     const [newEq1, newEq2] = cur.activeEq === 'eq1' ? [newEq, cur.eq2] : [cur.eq1, newEq];
+    sounds.multiply();
     pushState(newEq1, newEq2);
   }
 
@@ -590,8 +609,8 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
 
       <div className="system-steps-bar">
         <span className="steps-label">STEPS: {steps}</span>
-        {level.optimalSteps && (
-          <span className="steps-optimal">TARGET: {level.optimalSteps}</span>
+        {computedOptimal > 0 && (
+          <span className="steps-optimal">TARGET: {computedOptimal}</span>
         )}
       </div>
 
