@@ -51,14 +51,14 @@ export default function SheepMascot({ mood }) {
     return () => clearTimeout(t);
   }, [mood]);
 
-  const sleeping = anim === 'thinking';
+  const flying = anim === 'happy' || anim === 'win' || anim === 'celebrate';
   const fps = anim === 'thinking' ? 6
             : anim === 'happy' || anim === 'celebrate' ? 16
             : 10;
 
   return (
     <div className={`sheep-mascot sheep-${anim}`} aria-hidden="true">
-      <SheepSprite sheet={sleeping ? sheepSleep : sheepFly} fps={fps} size={112} />
+      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={112} />
     </div>
   );
 }
