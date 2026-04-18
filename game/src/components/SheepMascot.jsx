@@ -13,24 +13,26 @@ function SheepSprite({ sheet, fps = 10, size = 112 }) {
     return () => clearInterval(id);
   }, [fps]);
 
-  const col      = frame % COLS;
-  const row      = Math.floor(frame / COLS);
-  const sheetPx  = size * COLS;
+  const col     = frame % COLS;
+  const row     = Math.floor(frame / COLS);
+  const sheetPx = size * COLS;
 
   return (
-    <div
-      style={{
-        width:              size,
-        height:             size,
-        backgroundImage:    `url(${sheet})`,
-        backgroundSize:     `${sheetPx}px ${sheetPx}px`,
-        backgroundPosition: `-${col * size}px -${row * size}px`,
-        backgroundRepeat:   'no-repeat',
-        backgroundColor:    'transparent',
-        imageRendering:     'pixelated',
-      }}
-      aria-hidden="true"
-    />
+    <div style={{ width: size, height: size, overflow: 'hidden', position: 'relative' }}>
+      <img
+        src={sheet}
+        width={sheetPx}
+        height={sheetPx}
+        style={{
+          position:      'absolute',
+          left:          -(col * size),
+          top:           -(row * size),
+          imageRendering: 'pixelated',
+          display:       'block',
+        }}
+        alt=""
+      />
+    </div>
   );
 }
 
