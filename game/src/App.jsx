@@ -150,8 +150,10 @@ export default function App() {
   function startLevel(lvl) {
     setLevel(lvl);
     if (lvl.isSystem) {
+      if (!lvl.isWord) setReturnTab('systems');
       setScreen('system-game');
     } else {
+      if (!lvl.isWord) setReturnTab('equations');
       setScreen('game');
     }
   }
