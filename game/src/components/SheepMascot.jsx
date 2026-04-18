@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import sheepFly   from '/sheep-fly.png';
+import sheepSleep from '/sheep-sleep.png';
 
 const COLS         = 5;
 const TOTAL_FRAMES = 25;
@@ -34,7 +36,7 @@ function SheepSprite({ sheet, fps = 10, size = 112 }) {
 // Named export kept for VictoryScreen
 export function SheepSVG({ pixelSize = 7 }) {
   const size = Math.round(pixelSize * 14);
-  return <SheepSprite sheet="/sheep-fly.png" fps={10} size={size} />;
+  return <SheepSprite sheet={sheepFly} fps={10} size={size} />;
 }
 
 // Game-screen mascot driven by mood prop
@@ -56,7 +58,7 @@ export default function SheepMascot({ mood }) {
 
   return (
     <div className={`sheep-mascot sheep-${anim}`} aria-hidden="true">
-      <SheepSprite sheet={sleeping ? '/sheep-sleep.png' : '/sheep-fly.png'} fps={fps} size={112} />
+      <SheepSprite sheet={sleeping ? sheepSleep : sheepFly} fps={fps} size={112} />
     </div>
   );
 }
