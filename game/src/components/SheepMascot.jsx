@@ -26,6 +26,7 @@ function SheepSprite({ sheet, fps = 10, size = 112 }) {
         backgroundSize:     `${sheetPx}px ${sheetPx}px`,
         backgroundPosition: `-${col * size}px -${row * size}px`,
         backgroundRepeat:   'no-repeat',
+        backgroundColor:    'transparent',
         imageRendering:     'pixelated',
       }}
       aria-hidden="true"

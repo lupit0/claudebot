@@ -616,7 +616,7 @@ body::after {
   from { transform: translateY(40px) scale(0.6); opacity: 0; }
   to   { transform: translateY(0)    scale(1);   opacity: 1; }
 }
-.victory-sheep-wrap > div > div {
+.victory-sheep-wrap > div {
   animation: victory-sheep-dance 0.9s ease-in-out infinite alternate;
   transform-origin: bottom center;
 }
