@@ -738,7 +738,8 @@ body::after {
 .pad-btn:active:not(:disabled) { transform: translate(2px,2px); box-shadow: 1px 1px 0 #000; }
 .pad-btn:disabled { opacity: 0.3; cursor: default; }
 .pad-zero { grid-column: span 2; }
-.pad-clr  { grid-column: span 2; background: #200a0a; border-color: #550a0a; color: #ff6666; }
+.pad-clr  { background: #200a0a; border-color: #550a0a; color: #ff6666; }
+.pad-del  { background: #200a0a; border-color: #994422; color: #ff9966; }
 .pad-x    { background: #0a1a3a; border-color: var(--blue); color: var(--cyan); font-weight: bold; }
 .pad-frac { background: #1a1a2a; border-color: var(--purple); color: #c0a0ff; }
 .pad-plus { background: #0a2a1a; border-color: var(--green); color: var(--green); }

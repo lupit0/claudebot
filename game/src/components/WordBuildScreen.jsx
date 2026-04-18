@@ -145,6 +145,19 @@ function useBuilderState() {
     setNeg(false);
   }
 
+  // Removes the last committed term (ignores pending digit input)
+  function pressDeleteTerm() {
+    resetInput();
+    if (inGroup) {
+      if (groupInner.length > 0) { setGroupInner(p => p.slice(0, -1)); return; }
+      setInGroup(false); setGroupMul(null); return;
+    }
+    if (side === 'right' && right.length === 0) { setSide('left'); return; }
+    if (side === 'left') setLeft(p => p.slice(0, -1));
+    else                 setRight(p => p.slice(0, -1));
+    setNeg(false);
+  }
+
   function pressClear() {
     setLeft([]); setRight([]); setSide('left');
     resetInput();
@@ -203,7 +216,7 @@ function useBuilderState() {
   return {
     left, right, side, num, inDen, neg, inGroup, groupMul, groupInner,
     pressDigit, pressSlash, pressVar, pressPlus, pressMinus,
-    pressOpenParen, pressCloseParen, pressEquals, pressBackspace, pressClear,
+    pressOpenParen, pressCloseParen, pressEquals, pressBackspace, pressDeleteTerm, pressClear,
     getFinalisedSides, renderSide,
     canEquals:     side === 'left' && !inGroup,
     canOpenParen:  !inGroup,
@@ -379,7 +392,7 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
           <button className="pad-btn" onClick={() => active.pressDigit('2')}>2</button>
           <button className="pad-btn" onClick={() => active.pressDigit('3')}>3</button>
           <button className="pad-btn pad-eq"    onClick={active.pressEquals}     disabled={!active.canEquals}>=</button>
-          <button className="pad-btn pad-clr"   onClick={active.pressClear}>CLR</button>
+          <button className="pad-btn pad-del"   onClick={active.pressDeleteTerm} title="Delete last term">DEL</button>
         </div>
         <div className="pad-row">
           <button className="pad-btn" onClick={() => active.pressDigit('0')}>0</button>
@@ -387,8 +400,8 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
           <button className="pad-btn pad-paren" onClick={active.pressCloseParen} disabled={!active.canCloseParen}>)</button>
           <button className="pad-btn pad-x"     onClick={() => active.pressVar('x')}>x</button>
           {isSystem
-            ? <button className="pad-btn pad-y" onClick={() => active.pressVar('y')}>y</button>
-            : <div />
+            ? <button className="pad-btn pad-y"   onClick={() => active.pressVar('y')}>y</button>
+            : <button className="pad-btn pad-clr" onClick={active.pressClear} title="Clear all">CLR</button>
           }
         </div>
       </div>
