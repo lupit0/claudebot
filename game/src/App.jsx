@@ -127,6 +127,7 @@ export default function App() {
   const [customLevels, setCustomLevels] = useState(loadCustomLevels);
   const [systemCustomLevels, setSystemCustomLevels] = useState(loadSystemCustomLevels);
   const [wordProblem,   setWordProblem]   = useState(null);
+  const [returnTab,     setReturnTab]     = useState('equations');
   const [wordCompleted, setWordCompleted] = useState(() => {
     try {
       const raw = localStorage.getItem('eq-quest-word-completed');
@@ -157,6 +158,7 @@ export default function App() {
 
   function startWordLevel(problem) {
     setWordProblem(problem);
+    setReturnTab('word');
     setScreen('word-build');
   }
 
@@ -317,6 +319,7 @@ export default function App() {
           systemCustomLevels={systemCustomLevels}
           onBuildSystem={() => setScreen('system-builder')}
           onDeleteSystemCustom={deleteSystemCustomLevel}
+          defaultTab={returnTab}
         />
       )}
       {screen === 'builder' && (

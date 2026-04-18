@@ -8,8 +8,9 @@ export default function LevelSelect({
   completed, overrides = {}, customLevels = [], onSelect, onReset, onBuild, onDeleteCustom,
   systemCustomLevels = [], onBuildSystem, onDeleteSystemCustom,
   wordProblems = [], wordCompleted = new Set(), onSelectWord,
+  defaultTab = 'equations',
 }) {
-  const [tab, setTab] = useState('equations');
+  const [tab, setTab] = useState(defaultTab);
 
   const eqTotal   = LEVELS.length + SYSTEM_LEVELS.length;
   const wordTotal = wordProblems.length;
