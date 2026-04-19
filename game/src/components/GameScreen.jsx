@@ -78,7 +78,7 @@ export default function GameScreen({ level, initialState, onWin, onBack, wordCon
       const optimal    = computeOptimalSteps(cur.history[0]);
       setSheepMood('win');
       sounds.win();
-      setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 700);
+      setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 3300);
     }
   }
 
@@ -224,7 +224,7 @@ export default function GameScreen({ level, initialState, onWin, onBack, wordCon
           const startEqStr = equationStr(curHist[0]);
           const optimal    = computeOptimalSteps(curHist[0]);
           setSheepMood('win');
-          setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 700);
+          setTimeout(() => onWin(nextStep, sol, startEqStr, optimal), 3300);
         }
 
       } else {

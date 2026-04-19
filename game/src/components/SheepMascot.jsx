@@ -6,7 +6,7 @@ const COLS         = 5;
 const TOTAL_FRAMES = 25;
 const SRC_FRAME    = 256;
 
-function SheepSprite({ sheet, fps = 10, size = 128 }) {
+function SheepSprite({ sheet, fps = 10, size = 160 }) {
   const canvasRef = useRef(null);
   const imgRef    = useRef(null);
   const frameRef  = useRef(0);
@@ -45,24 +45,26 @@ function SheepSprite({ sheet, fps = 10, size = 128 }) {
       ref={canvasRef}
       width={size}
       height={size}
-      style={{ imageRendering: 'pixelated', display: 'block' }}
+      style={{ imageRendering: 'pixelated', display: 'block', background: 'transparent' }}
       aria-hidden="true"
     />
   );
 }
 
+// Named export for VictoryScreen
 export function SheepSVG({ pixelSize = 7 }) {
   const size = Math.round(pixelSize * 14);
   return <SheepSprite sheet={sheepFly} fps={10} size={size} />;
 }
 
+// Full-page overlay mascot driven by mood prop
 export default function SheepMascot({ mood }) {
   const [anim, setAnim] = useState('idle');
 
   useEffect(() => {
     if (mood === 'idle' || mood === 'celebrate') { setAnim(mood); return; }
     setAnim(mood);
-    const dur = mood === 'win' ? 2200 : mood === 'thinking' ? 1400 : 700;
+    const dur = mood === 'win' ? 3500 : mood === 'thinking' ? 1400 : 700;
     const t = setTimeout(() => setAnim('idle'), dur);
     return () => clearTimeout(t);
   }, [mood]);
@@ -74,7 +76,7 @@ export default function SheepMascot({ mood }) {
 
   return (
     <div className={`sheep-mascot sheep-${anim}`} aria-hidden="true">
-      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={128} />
+      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={160} />
     </div>
   );
 }

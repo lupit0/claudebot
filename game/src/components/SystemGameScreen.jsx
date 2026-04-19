@@ -94,7 +94,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
       sounds.win();
       setTimeout(() => {
         onWin(cur.steps + 1, sol.str, startStr, computedOptimal);
-      }, 700);
+      }, 3300);
     }
   }, [computedOptimal, onWin]);
 
