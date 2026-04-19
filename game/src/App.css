@@ -545,78 +545,86 @@ body::after {
   animation: blink 0.8s 3;
 }
 
-/* ─── Sheep Mascot — full-page overlay ──────────────────── */
+/* ─── Sheep Mascot ───────────────────────────────────────── */
 .sheep-mascot {
   position: fixed;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 10000;
-  background: transparent;
+  bottom: 0;
+  left: 50%;
+  margin-left: -64px;    /* center: half of 128px */
+  z-index: 10000;        /* above scanlines (9999) */
+  cursor: pointer;
 }
 
-/* ── Idle: gentle breathing bob ── */
-.sheep-idle > canvas {
+.sheep-mascot > div { transform-origin: bottom center; }
+
+/* ── Idle: gentle bob ── */
+.sheep-idle > div {
   animation: sheep-float 3s ease-in-out infinite;
 }
 @keyframes sheep-float {
   0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-14px); }
+  50%      { transform: translateY(-12px); }
 }
 
 /* ── Happy: bounce ── */
-.sheep-happy > canvas {
+.sheep-happy > div {
   animation: sheep-bounce 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes sheep-bounce {
   0%   { transform: translateY(0)     scale(1.0); }
-  35%  { transform: translateY(-50px) scale(1.2); }
-  70%  { transform: translateY(-18px) scale(1.05); }
+  35%  { transform: translateY(-45px) scale(1.2); }
+  70%  { transform: translateY(-15px) scale(1.05); }
   100% { transform: translateY(0)     scale(1.0); }
 }
 
 /* ── Thinking: subtle bob ── */
-.sheep-thinking > canvas {
+.sheep-thinking > div {
   animation: sheep-think 2s ease-in-out infinite;
 }
 @keyframes sheep-think {
   0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-8px); }
+  50%      { transform: translateY(-6px); }
 }
 
 /* ── Win: loop around the whole page then fly off ── */
-.sheep-win > canvas {
+.sheep-win {
+  pointer-events: none;
+  cursor: default;
   animation: sheep-win-loop 3.2s ease-in-out forwards;
-  transform-origin: center center;
 }
 @keyframes sheep-win-loop {
-  0%   { transform: translate(0,     0)      rotate(0deg)   scale(1);   opacity: 1; }
-  10%  { transform: translate(25vw, -30vh)   rotate(20deg)  scale(1.1); opacity: 1; }
-  25%  { transform: translate(35vw,  5vh)    rotate(10deg)  scale(1);   opacity: 1; }
-  40%  { transform: translate(22vw,  35vh)   rotate(-15deg) scale(1.1); opacity: 1; }
-  55%  { transform: translate(-22vw, 35vh)   rotate(-20deg) scale(1);   opacity: 1; }
-  70%  { transform: translate(-35vw, 5vh)    rotate(15deg)  scale(1.1); opacity: 1; }
-  82%  { transform: translate(-25vw,-30vh)   rotate(20deg)  scale(1);   opacity: 1; }
-  90%  { transform: translate(0,   -18vh)    rotate(0deg)   scale(1.2); opacity: 1; }
-  100% { transform: translate(0,  -120vh)    rotate(720deg) scale(0.4); opacity: 0; }
+  0%   { transform: translate(0,      0)     rotate(0deg)   scale(1);   opacity: 1; }
+  12%  { transform: translate(28vw, -60vh)   rotate(25deg)  scale(1.1); opacity: 1; }
+  25%  { transform: translate(40vw, -28vh)   rotate(15deg)  scale(1);   opacity: 1; }
+  38%  { transform: translate(25vw, -78vh)   rotate(-20deg) scale(1.1); opacity: 1; }
+  52%  { transform: translate(-25vw,-78vh)   rotate(-25deg) scale(1);   opacity: 1; }
+  65%  { transform: translate(-40vw,-28vh)   rotate(15deg)  scale(1.1); opacity: 1; }
+  78%  { transform: translate(-28vw,-60vh)   rotate(25deg)  scale(1);   opacity: 1; }
+  88%  { transform: translate(0,   -45vh)    rotate(0deg)   scale(1.2); opacity: 1; }
+  100% { transform: translate(0,  -130vh)    rotate(720deg) scale(0.4); opacity: 0; }
 }
 
-/* ─── Victory screen sheep ───────────────────────────────── */
+/* ─── Victory screen sheep — above scanlines ─────────────── */
 .victory-sheep-wrap {
   display: flex;
   justify-content: center;
   margin: 8px 0 16px;
   animation: victory-sheep-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  position: relative;
+  z-index: 10001;
 }
 @keyframes victory-sheep-enter {
   from { transform: translateY(40px) scale(0.6); opacity: 0; }
   to   { transform: translateY(0)    scale(1);   opacity: 1; }
 }
-.victory-sheep-wrap > canvas {
+.victory-sheep-wrap .victory-dancer {
   animation: victory-sheep-dance 0.9s ease-in-out infinite alternate;
   transform-origin: bottom center;
+  display: inline-block;
+}
+@keyframes victory-sheep-dance {
+  from { transform: translateY(0)     rotate(-4deg) scale(1.0); }
+  to   { transform: translateY(-14px) rotate( 4deg) scale(1.04); }
 }
 @keyframes victory-sheep-dance {
   from { transform: translateY(0)     rotate(-4deg) scale(1.0); }

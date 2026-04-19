@@ -4,50 +4,38 @@ import sheepSleep from '/sheep-sleep.png';
 
 const COLS         = 5;
 const TOTAL_FRAMES = 25;
-const SRC_FRAME    = 256;
 
-function SheepSprite({ sheet, fps = 10, size = 160 }) {
-  const canvasRef = useRef(null);
-  const imgRef    = useRef(null);
-  const frameRef  = useRef(0);
-
-  function paint(f) {
-    const cvs = canvasRef.current;
-    const img = imgRef.current;
-    if (!cvs || !img) return;
-    const ctx = cvs.getContext('2d');
-    ctx.clearRect(0, 0, size, size);
-    ctx.drawImage(
-      img,
-      (f % COLS) * SRC_FRAME, Math.floor(f / COLS) * SRC_FRAME,
-      SRC_FRAME, SRC_FRAME,
-      0, 0, size, size,
-    );
-  }
+// Size 128 = exact 2x downscale from 256px source → no fractional pixel artifacts
+function SheepSprite({ sheet, fps = 10, size = 128 }) {
+  const [frame, setFrame] = useState(0);
 
   useEffect(() => {
-    const img = new Image();
-    img.onload = () => { imgRef.current = img; paint(frameRef.current); };
-    img.src = sheet;
-    return () => { imgRef.current = null; };
-  }, [sheet]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      frameRef.current = (frameRef.current + 1) % TOTAL_FRAMES;
-      paint(frameRef.current);
-    }, 1000 / fps);
+    const id = setInterval(() => setFrame(f => (f + 1) % TOTAL_FRAMES), 1000 / fps);
     return () => clearInterval(id);
-  }, [fps, size, sheet]);
+  }, [fps]);
+
+  const col     = frame % COLS;
+  const row     = Math.floor(frame / COLS);
+  const sheetPx = size * COLS;
 
   return (
-    <canvas
-      ref={canvasRef}
-      width={size}
-      height={size}
-      style={{ imageRendering: 'pixelated', display: 'block', background: 'transparent' }}
-      aria-hidden="true"
-    />
+    <div style={{ width: size, height: size, overflow: 'hidden', position: 'relative' }}>
+      <img
+        src={sheet}
+        draggable={false}
+        style={{
+          position:       'absolute',
+          width:          sheetPx,
+          height:         sheetPx,
+          left:           -(col * size),
+          top:            -(row * size),
+          imageRendering: 'pixelated',
+          display:        'block',
+          userSelect:     'none',
+        }}
+        alt=""
+      />
+    </div>
   );
 }
 
@@ -57,9 +45,11 @@ export function SheepSVG({ pixelSize = 7 }) {
   return <SheepSprite sheet={sheepFly} fps={10} size={size} />;
 }
 
-// Full-page overlay mascot driven by mood prop
+// Game-screen mascot driven by mood prop
 export default function SheepMascot({ mood }) {
   const [anim, setAnim] = useState('idle');
+  const wrapRef   = useRef(null);
+  const dodgeRef  = useRef(null);
 
   useEffect(() => {
     if (mood === 'idle' || mood === 'celebrate') { setAnim(mood); return; }
@@ -69,14 +59,37 @@ export default function SheepMascot({ mood }) {
     return () => clearTimeout(t);
   }, [mood]);
 
+  function handleClick() {
+    if (anim === 'win') return;
+    const el = wrapRef.current;
+    if (!el) return;
+    el.style.transition = 'left 0.4s ease, right 0.4s ease, margin-left 0.4s ease, opacity 0.4s ease';
+    el.style.left        = 'auto';
+    el.style.right       = '8px';
+    el.style.marginLeft  = '0';
+    el.style.opacity     = '0.5';
+    clearTimeout(dodgeRef.current);
+    dodgeRef.current = setTimeout(() => {
+      el.style.left       = '50%';
+      el.style.right      = 'auto';
+      el.style.marginLeft = '-64px';
+      el.style.opacity    = '1';
+    }, 5000);
+  }
+
   const flying = anim === 'happy' || anim === 'win' || anim === 'celebrate';
   const fps    = anim === 'thinking' ? 6
                : anim === 'happy' || anim === 'celebrate' ? 16
                : 10;
 
   return (
-    <div className={`sheep-mascot sheep-${anim}`} aria-hidden="true">
-      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={160} />
+    <div
+      ref={wrapRef}
+      className={`sheep-mascot sheep-${anim}`}
+      onClick={handleClick}
+      aria-hidden="true"
+    >
+      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={128} />
     </div>
   );
 }
