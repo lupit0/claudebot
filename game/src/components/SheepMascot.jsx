@@ -1,48 +1,61 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import sheepFly   from '/sheep-fly.png';
 import sheepSleep from '/sheep-sleep.png';
 
 const COLS         = 5;
 const TOTAL_FRAMES = 25;
+const SRC_FRAME    = 256;
 
-function SheepSprite({ sheet, fps = 10, size = 112 }) {
-  const [frame, setFrame] = useState(0);
+function SheepSprite({ sheet, fps = 10, size = 128 }) {
+  const canvasRef = useRef(null);
+  const imgRef    = useRef(null);
+  const frameRef  = useRef(0);
+
+  function paint(f) {
+    const cvs = canvasRef.current;
+    const img = imgRef.current;
+    if (!cvs || !img) return;
+    const ctx = cvs.getContext('2d');
+    ctx.clearRect(0, 0, size, size);
+    ctx.drawImage(
+      img,
+      (f % COLS) * SRC_FRAME, Math.floor(f / COLS) * SRC_FRAME,
+      SRC_FRAME, SRC_FRAME,
+      0, 0, size, size,
+    );
+  }
 
   useEffect(() => {
-    const id = setInterval(() => setFrame(f => (f + 1) % TOTAL_FRAMES), 1000 / fps);
-    return () => clearInterval(id);
-  }, [fps]);
+    const img = new Image();
+    img.onload = () => { imgRef.current = img; paint(frameRef.current); };
+    img.src = sheet;
+    return () => { imgRef.current = null; };
+  }, [sheet]);
 
-  const col     = frame % COLS;
-  const row     = Math.floor(frame / COLS);
-  const sheetPx = size * COLS;
+  useEffect(() => {
+    const id = setInterval(() => {
+      frameRef.current = (frameRef.current + 1) % TOTAL_FRAMES;
+      paint(frameRef.current);
+    }, 1000 / fps);
+    return () => clearInterval(id);
+  }, [fps, size, sheet]);
 
   return (
-    <div style={{ width: size, height: size, overflow: 'hidden', position: 'relative' }}>
-      <img
-        src={sheet}
-        width={sheetPx}
-        height={sheetPx}
-        style={{
-          position:      'absolute',
-          left:          -(col * size),
-          top:           -(row * size),
-          imageRendering: 'pixelated',
-          display:       'block',
-        }}
-        alt=""
-      />
-    </div>
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      style={{ imageRendering: 'pixelated', display: 'block' }}
+      aria-hidden="true"
+    />
   );
 }
 
-// Named export kept for VictoryScreen
 export function SheepSVG({ pixelSize = 7 }) {
   const size = Math.round(pixelSize * 14);
   return <SheepSprite sheet={sheepFly} fps={10} size={size} />;
 }
 
-// Game-screen mascot driven by mood prop
 export default function SheepMascot({ mood }) {
   const [anim, setAnim] = useState('idle');
 
@@ -55,13 +68,13 @@ export default function SheepMascot({ mood }) {
   }, [mood]);
 
   const flying = anim === 'happy' || anim === 'win' || anim === 'celebrate';
-  const fps = anim === 'thinking' ? 6
-            : anim === 'happy' || anim === 'celebrate' ? 16
-            : 10;
+  const fps    = anim === 'thinking' ? 6
+               : anim === 'happy' || anim === 'celebrate' ? 16
+               : 10;
 
   return (
     <div className={`sheep-mascot sheep-${anim}`} aria-hidden="true">
-      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={112} />
+      <SheepSprite sheet={flying ? sheepFly : sheepSleep} fps={fps} size={128} />
     </div>
   );
 }
