@@ -53,6 +53,7 @@ export default function SheepMascot({ mood }) {
 
   useEffect(() => {
     if (mood === 'idle' || mood === 'celebrate') { setAnim(mood); return; }
+    if (mood === 'happy') return; // no animation for step-correct events
     setAnim(mood);
     const dur = mood === 'win' ? 3500 : mood === 'thinking' ? 1400 : 700;
     const t = setTimeout(() => setAnim('idle'), dur);
@@ -63,13 +64,16 @@ export default function SheepMascot({ mood }) {
     if (anim === 'win') return;
     const el = wrapRef.current;
     if (!el) return;
-    el.style.transition = 'left 0.4s ease, right 0.4s ease, margin-left 0.4s ease, opacity 0.4s ease';
+    setAnim('dodging');
+    el.style.transition = 'left 1.6s ease, right 1.6s ease, margin-left 1.6s ease, bottom 1.6s ease, opacity 0.8s ease';
     el.style.left        = 'auto';
     el.style.right       = '8px';
     el.style.marginLeft  = '0';
-    el.style.opacity     = '0.5';
+    el.style.opacity     = '0.75';
     clearTimeout(dodgeRef.current);
     dodgeRef.current = setTimeout(() => {
+      setAnim('idle');
+      el.style.transition = 'left 1.6s ease, right 1.6s ease, margin-left 1.6s ease, bottom 1.6s ease, opacity 0.8s ease';
       el.style.left       = '50%';
       el.style.right      = 'auto';
       el.style.marginLeft = '-64px';
@@ -77,9 +81,9 @@ export default function SheepMascot({ mood }) {
     }, 5000);
   }
 
-  const flying = anim === 'happy' || anim === 'win' || anim === 'celebrate';
+  const flying = anim === 'win' || anim === 'celebrate' || anim === 'dodging';
   const fps    = anim === 'thinking' ? 6
-               : anim === 'happy' || anim === 'celebrate' ? 16
+               : anim === 'celebrate' || anim === 'dodging' ? 14
                : 10;
 
   return (

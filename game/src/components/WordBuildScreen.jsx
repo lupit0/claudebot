@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import SheepMascot from './SheepMascot';
 import { frac } from '../utils/fractions';
 
 // ─── Evaluation helpers ──────────────────────────────────────
@@ -230,7 +229,6 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
   const isSystem = problem.equationCount === 2;
 
   const [activeEq,   setActiveEq]   = useState(1);
-  const [sheepMood,  setSheepMood]  = useState('thinking');
   const [error,      setError]      = useState('');
   const [success,    setSuccess]    = useState('');
 
@@ -257,8 +255,7 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
     const lhs1 = evalSide(s1.left, sol);
     const rhs1 = evalSide(s1.right, sol);
     if (Math.abs(lhs1 - rhs1) > 0.001) {
-      setSheepMood('thinking');
-      setError("That equation doesn't fit the answer — check your equation and try again.");
+        setError("That equation doesn't fit the answer — check your equation and try again.");
       return;
     }
 
@@ -292,13 +289,11 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
         return;
       }
 
-      setSheepMood('win');
       setSuccess('Both equations are correct! Now solve the system...');
       setTimeout(() => onBuilt(s1, s2), 1400);
       return;
     }
 
-    setSheepMood('win');
     setSuccess('Correct equation! Now solve it...');
     setTimeout(() => onBuilt(s1, null), 1400);
   }
@@ -415,7 +410,6 @@ export default function WordBuildScreen({ problem, onBuilt, onBack }) {
         </button>
       </div>
 
-      <SheepMascot mood={sheepMood} />
     </div>
   );
 }
