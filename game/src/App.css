@@ -602,27 +602,47 @@ body::after {
   to   { transform: rotate(360deg); }
 }
 
-/* ─── Victory screen sheep — above scanlines ─────────────── */
+/* ─── Victory screen sheep — orbits around buttons, above scanlines ── */
 .victory-sheep-wrap {
   display: flex;
   justify-content: center;
   margin: 8px 0 16px;
-  animation: victory-sheep-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
   position: relative;
   z-index: 10001;
 }
-@keyframes victory-sheep-enter {
-  from { transform: translateY(40px) scale(0.6); opacity: 0; }
-  to   { transform: translateY(0)    scale(1);   opacity: 1; }
+/* Outer element: traces the oval path (translate only) */
+.victory-orbit-path {
+  animation: v-orbit-path 3.8s linear infinite;
 }
-.victory-sheep-wrap .victory-dancer {
-  animation: victory-sheep-dance 0.9s ease-in-out infinite alternate;
-  transform-origin: bottom center;
-  display: inline-block;
+@keyframes v-orbit-path {
+  0%   { transform: translate(0,      0);    }
+  12%  { transform: translate(-16vw,  8vh);  }
+  25%  { transform: translate(-19vw, 18vh);  }
+  38%  { transform: translate(-11vw, 26vh);  }
+  50%  { transform: translate(0,     28vh);  }
+  62%  { transform: translate(13vw,  24vh);  }
+  75%  { transform: translate(18vw,  14vh);  }
+  87%  { transform: translate(12vw,   4vh);  }
+  100% { transform: translate(0,      0);    }
 }
-@keyframes victory-sheep-dance {
-  from { transform: translateY(0)     rotate(-4deg) scale(1.0); }
-  to   { transform: translateY(-14px) rotate( 4deg) scale(1.04); }
+/* Inner element: handles facing direction (flip + tilt) */
+.victory-orbit-face {
+  animation: v-orbit-face 3.8s linear infinite;
+}
+@keyframes v-orbit-face {
+  0%   { transform: scaleX(-1) rotate(  5deg); } /* going left */
+  12%  { transform: scaleX(-1) rotate(-20deg); } /* down-left  */
+  25%  { transform: scaleX(-1) rotate(-40deg); } /* going down */
+  34%  { transform: scaleX(-1) rotate(-45deg); } /* snap point */
+  36%  { transform: scaleX( 1) rotate( 45deg); } /* going down-right */
+  38%  { transform: scaleX( 1) rotate( 35deg); }
+  50%  { transform: scaleX( 1) rotate(  0deg); } /* going right */
+  62%  { transform: scaleX( 1) rotate(-25deg); } /* up-right   */
+  75%  { transform: scaleX( 1) rotate(-40deg); } /* going up   */
+  84%  { transform: scaleX( 1) rotate(-45deg); } /* snap point */
+  86%  { transform: scaleX(-1) rotate( 45deg); } /* going up-left */
+  88%  { transform: scaleX(-1) rotate( 30deg); }
+  100% { transform: scaleX(-1) rotate(  5deg); } /* back to going left */
 }
 
 /* ─── Equation Builder ──────────────────────────────────── */

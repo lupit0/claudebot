@@ -62,8 +62,10 @@ export default function VictoryScreen({ level, steps, solution, startEq, optimal
         </div>
 
         <div className="victory-sheep-wrap">
-          <div className="victory-dancer">
-            <SheepSVG pixelSize={10} />
+          <div className="victory-orbit-path">
+            <div className="victory-orbit-face">
+              <SheepSVG pixelSize={10} />
+            </div>
           </div>
         </div>
 

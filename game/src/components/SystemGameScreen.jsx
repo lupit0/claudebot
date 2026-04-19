@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import EquationBoard from './EquationBoard';
-import SheepMascot from './SheepMascot';
 import { termMagLabel, frac } from '../utils/fractions';
 import {
   moveTermS, combineTermsS, multiplyEqS, expandGroupS,
@@ -39,7 +38,6 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
   const [history,  setHistory]  = useState([]);
   const [steps,    setSteps]    = useState(0);
   const [hintMsg,  setHintMsg]  = useState('');
-  const [sheepMood,setSheepMood]= useState('idle');
   const [flash,    setFlash]    = useState('');
   const [dropSide, setDropSide] = useState(null);
   const [dropEq,   setDropEq]   = useState(null);
@@ -83,14 +81,11 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     setSelected(null);
     setSecond(null);
     setFlash('correct');
-    setSheepMood('happy');
-    setTimeout(() => setSheepMood('idle'), 700);
     setTimeout(() => setFlash(''), 600);
 
     if (checkSystemWin(newEq1, newEq2)) {
       const sol      = extractSystemSolution(newEq1, newEq2);
       const startStr = systemStr(initialEq1Ref.current, initialEq2Ref.current);
-      setSheepMood('win');
       sounds.win();
       setTimeout(() => {
         onWin(cur.steps + 1, sol.str, startStr, computedOptimal);
@@ -425,8 +420,7 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
     const cur = latestRef.current;
     const msg = suggestSystemHint(cur.eq1, cur.eq2);
     setHintMsg(msg);
-    setSheepMood('thinking');
-    setTimeout(() => { setSheepMood('idle'); setTimeout(() => setHintMsg(''), 3000); }, 1000);
+    setTimeout(() => setHintMsg(''), 4000);
   }
 
   // ── Action bar ────────────────────────────────────────────────
@@ -614,7 +608,6 @@ export default function SystemGameScreen({ level, onWin, onBack, wordContext }) 
         )}
       </div>
 
-      <SheepMascot mood={sheepMood} />
     </div>
   );
 }
