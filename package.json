@@ -1,0 +1,16 @@
+{
+  "name": "seneca-voice",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private browser voice interface for Seneca/OpenClaw.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js",
+    "test": "NODE_ENV=test node --test"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {}
+}

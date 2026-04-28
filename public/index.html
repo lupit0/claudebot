@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Seneca Voice</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="eyebrow">Private voice link</div>
+      <h1>Talk to Seneca</h1>
+      <p class="sub">Push to talk. Your browser handles the microphone; Seneca replies with voice.</p>
+
+      <div id="status" class="status">Ready</div>
+
+      <button id="talk" class="orb" type="button" aria-label="Hold to talk">
+        <span id="orbText">Hold<br/>to talk</span>
+      </button>
+
+      <div class="controls">
+        <button id="mute" type="button">Voice on</button>
+        <button id="stop" type="button">Stop speaking</button>
+      </div>
+
+      <form id="textForm" class="textForm">
+        <input id="textInput" autocomplete="off" placeholder="Or type a message…" />
+        <button type="submit">Send</button>
+      </form>
+
+      <ol id="log" class="log"></ol>
+    </section>
+  </main>
+  <script src="./app.js" type="module"></script>
+</body>
+</html>
